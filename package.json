@@ -1,0 +1,12 @@
+{
+  "name": "twitch-text-flow-overlay-desktop",
+  "version": "1.0.0",
+  "description": "A desktop app that streams Twitch comments.",
+  "license": "MIT",
+  "author": "Tansan Vision",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
