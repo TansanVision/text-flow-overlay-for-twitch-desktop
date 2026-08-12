@@ -1,0 +1,39 @@
+html.control-panel-page {
+  color: #e7e8ee;
+  background: #15171d;
+  font-family: system-ui, sans-serif;
+}
+
+html.control-panel-page,
+body.control-panel-page {
+  margin: 0;
+  background: #15171d;
+}
+
+body.control-panel-page #root {
+  min-height: 100vh;
+  background: #15171d;
+}
+
+.control-panel {
+  max-width: 720px;
+  margin: 72px auto;
+  padding: 32px;
+}
+
+.control-panel h1 {
+  color: #a970ff;
+}
+
+.control-panel dl {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #20232c;
+}
+
+.control-panel dd {
+  margin: 0;
+}

@@ -5,8 +5,40 @@
   "license": "MIT",
   "author": "Tansan Vision",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/bootstrap/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.json",
+    "build:renderer": "vite build",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "dev": "npm run build && electron .",
+    "dev:tauri": "node scripts/run-tauri.mjs dev",
+    "dev:web": "vite --host 127.0.0.1",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "start": "electron .",
+    "tauri": "tauri",
+    "tauri:build": "node scripts/run-tauri.mjs build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "electron": "^43.4.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  },
+  "dependencies": {
+    "@emotion/css": "^11.13.5",
+    "@emotion/react": "^11.14.0",
+    "@tauri-apps/api": "^2.11.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "uuid": "^14.0.1"
   }
 }
