@@ -1,37 +1,129 @@
 html.control-panel-page {
-  color: #e7e8ee;
-  background: #15171d;
-  font-family: system-ui, sans-serif;
+  color: #f4f2f8;
+  background: #111016;
+  font-family: Inter, system-ui, sans-serif;
 }
 
 html.control-panel-page,
 body.control-panel-page {
   margin: 0;
-  background: #15171d;
+  background: #111016;
 }
 
 body.control-panel-page #root {
   min-height: 100vh;
-  background: #15171d;
 }
 
 .control-panel {
-  max-width: 720px;
-  margin: 72px auto;
-  padding: 32px;
+  width: min(760px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.control-panel header {
+  margin-bottom: 28px;
+}
+
+.control-panel h1,
+.control-panel h2,
+.control-panel p {
+  margin-top: 0;
 }
 
 .control-panel h1 {
-  color: #a970ff;
+  margin-bottom: 0;
+  font-size: 36px;
+  letter-spacing: -0.04em;
+}
+
+.control-panel h2 {
+  font-size: 18px;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: #bf94ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.panel {
+  margin-top: 16px;
+  padding: 24px;
+  border: 1px solid #34303f;
+  border-radius: 14px;
+  background: #1b1922;
+}
+
+.control-panel button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #9147ff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.control-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.authorization {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #292432;
+}
+
+.authorization p {
+  flex: 1;
+  margin-bottom: 0;
+  color: #d4cfda;
+  font-size: 13px;
+}
+
+.authorization strong {
+  color: #fff;
+  font-size: 22px;
+  letter-spacing: 0.14em;
+}
+
+.success,
+.error {
+  margin: 16px 0 0;
+  font-weight: 700;
+}
+
+.connection-status {
+  margin-bottom: 0;
+  color: #9d97a7;
+}
+
+.success {
+  color: #72e6a5;
+}
+
+.error {
+  color: #ff8f9d;
 }
 
 .control-panel dl {
   display: grid;
-  grid-template-columns: 8rem 1fr;
+  grid-template-columns: 9rem 1fr;
   gap: 12px;
-  padding: 20px;
-  border-radius: 12px;
-  background: #20232c;
+  margin-bottom: 0;
+}
+
+.control-panel dt {
+  color: #9d97a7;
 }
 
 .control-panel dd {

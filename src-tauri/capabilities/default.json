@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Allows the local Tauri control panel to use application commands.",
   "windows": ["control-panel", "overlay"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://www.twitch.tv/activate*" }]
+    }
+  ]
 }
