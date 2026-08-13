@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import { type CommentSize, parseCommands } from './comment-command';
+import { useCallback, useEffect, useState } from 'react';
+import { BuiltInEffect } from './built-in-effect';
+import { type CommentSize, type EffectCommand, parseCommands } from './comment-command';
 import './style.css';
 
 type ChatFragment =
@@ -30,6 +31,7 @@ type ChatMessage = {
   alignment: string;
 };
 type IncomingChatMessage = { id: string; fragments: ChatFragment[] };
+type ActiveEffect = { id: string; type: EffectCommand };
 
 type OverlaySettings = { commentDurationSeconds: number; defaultSize: CommentSize };
 const defaultSettings: OverlaySettings = { commentDurationSeconds: 5, defaultSize: 'medium' };
@@ -81,21 +83,28 @@ export function Overlay(): React.JSX.Element {
   const [settings, setSettings] = useState(defaultSettings);
   const [customStamps, setCustomStamps] = useState<Map<string, string>>(new Map());
   const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
+  const [effects, setEffects] = useState<ActiveEffect[]>([]);
 
   useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
       const commands = parseCommands(fullText);
       const size = commands.size ?? settings.defaultSize;
+      const effect = commands.effect;
+      if (effect) {
+        setEffects((current) => [...current, { id: `${payload.id}-${effect}`, type: effect }]);
+      }
+      const fragments = expandCustomStamps(
+        trimFragments(payload.fragments, commands.removeLength),
+        customStamps,
+        externalEmotes,
+      );
+      if (fragments.every((fragment) => fragment.text.trim() === '')) return;
       setMessages((current) => [
         ...current,
         {
           ...payload,
-          fragments: expandCustomStamps(
-            trimFragments(payload.fragments, commands.removeLength),
-            customStamps,
-            externalEmotes,
-          ),
+          fragments,
           size,
           color: commands.color,
           alignment: commands.alignment,
@@ -141,9 +150,20 @@ export function Overlay(): React.JSX.Element {
   const removeMessage = (id: string) => {
     setMessages((current) => current.filter((message) => message.id !== id));
   };
+  const removeEffect = useCallback((id: string) => {
+    setEffects((current) => current.filter((effect) => effect.id !== id));
+  }, []);
 
   return (
     <main className="overlay" aria-label="Twitch Text Flow Overlay">
+      {effects.map((effect) => (
+        <BuiltInEffect
+          key={effect.id}
+          id={effect.id}
+          type={effect.type}
+          onComplete={removeEffect}
+        />
+      ))}
       {messages.map((message) => (
         <p
           className="chat-message"

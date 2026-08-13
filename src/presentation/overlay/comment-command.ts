@@ -10,6 +10,15 @@ export type CommentAlignment =
   | 'migishita'
   | 'hidariue'
   | 'hidarishita';
+export type EffectCommand =
+  | 'sakura'
+  | 'snow'
+  | 'balloons'
+  | 'kamifubuki'
+  | 'rain'
+  | 'maruta'
+  | 'chikuwa'
+  | 'marutai';
 
 const sizes = new Set(['small', 'medium', 'big']);
 const alignments = new Set([
@@ -22,6 +31,16 @@ const alignments = new Set([
   'migishita',
   'hidariue',
   'hidarishita',
+]);
+const effects = new Set([
+  'sakura',
+  'snow',
+  'balloons',
+  'kamifubuki',
+  'rain',
+  'maruta',
+  'chikuwa',
+  'marutai',
 ]);
 export const colors: Record<string, string> = {
   white: '#ffffff',
@@ -57,6 +76,7 @@ export type ParsedCommands = {
   size?: CommentSize;
   color?: string;
   alignment: CommentAlignment;
+  effect?: EffectCommand;
   removeLength: number;
 };
 
@@ -67,6 +87,7 @@ export function parseCommands(text: string): ParsedCommands {
     const command = match[0].toLowerCase();
     if (sizes.has(command)) result.size ??= command as CommentSize;
     else if (alignments.has(command)) result.alignment = command as CommentAlignment;
+    else if (effects.has(command)) result.effect ??= command as EffectCommand;
     else if (command in colors) result.color ??= colors[command];
     else break;
     result.removeLength = (match.index ?? 0) + match[0].length;
