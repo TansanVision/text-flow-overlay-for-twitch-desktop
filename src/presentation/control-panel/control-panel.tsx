@@ -23,6 +23,10 @@ type OverlaySettings = {
   commentDurationSeconds: number;
   defaultSize: 'small' | 'medium' | 'big';
 };
+type CustomStamp = { commandName: string; dataUri: string };
+type StampDefinition = { commandName: string; fileName: string };
+type StampEditorData = { definitions: StampDefinition[]; imageFiles: string[] };
+type EditableStampDefinition = StampDefinition & { id: string };
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -37,11 +41,27 @@ export function ControlPanel(): React.JSX.Element {
     defaultSize: 'medium',
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [customStampCount, setCustomStampCount] = useState(0);
+  const [stampDefinitions, setStampDefinitions] = useState<EditableStampDefinition[]>([]);
+  const [stampImageFiles, setStampImageFiles] = useState<string[]>([]);
+  const [stampsSaved, setStampsSaved] = useState(false);
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
     void invoke<OverlaySettings>('get_overlay_settings')
       .then(setOverlaySettings)
+      .catch((reason: unknown) => setError(String(reason)));
+  }, []);
+
+  useEffect(() => {
+    void invoke<StampEditorData>('get_custom_stamp_editor_data')
+      .then((data) => {
+        setStampDefinitions(
+          data.definitions.map((definition) => ({ ...definition, id: crypto.randomUUID() })),
+        );
+        setStampImageFiles(data.imageFiles);
+        setCustomStampCount(data.definitions.length);
+      })
       .catch((reason: unknown) => setError(String(reason)));
   }, []);
 
@@ -114,6 +134,38 @@ export function ControlPanel(): React.JSX.Element {
       await invoke('save_overlay_settings', { settings: overlaySettings });
       setSettingsSaved(true);
       window.setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
+  const reloadCustomStamps = async () => {
+    try {
+      const data = await invoke<StampEditorData>('get_custom_stamp_editor_data');
+      setStampDefinitions(
+        data.definitions.map((definition) => ({ ...definition, id: crypto.randomUUID() })),
+      );
+      setStampImageFiles(data.imageFiles);
+      await invoke<CustomStamp[]>('reload_custom_stamps');
+      setCustomStampCount(data.definitions.length);
+      setError(undefined);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
+  const saveCustomStamps = async () => {
+    try {
+      const stamps = await invoke<CustomStamp[]>('save_custom_stamp_definitions', {
+        definitions: stampDefinitions.map(({ commandName, fileName }) => ({
+          commandName,
+          fileName,
+        })),
+      });
+      setCustomStampCount(stamps.length);
+      setStampsSaved(true);
+      setError(undefined);
+      window.setTimeout(() => setStampsSaved(false), 2000);
     } catch (reason) {
       setError(String(reason));
     }
@@ -194,6 +246,85 @@ export function ControlPanel(): React.JSX.Element {
           設定を保存
         </button>
         {settingsSaved && <span className="saved-message">保存しました</span>}
+      </section>
+
+      <section className="panel" aria-labelledby="custom-stamps-title">
+        <h2 id="custom-stamps-title">カスタムスタンプ</h2>
+        <p>読み込み済み: {customStampCount}件</p>
+        <p className="help-text">
+          portable-data/custom-stamps に画像を配置してから再読み込みしてください。
+        </p>
+        <div className="stamp-editor">
+          {stampDefinitions.map((definition) => (
+            <div className="stamp-row" key={definition.id}>
+              <input
+                aria-label="コマンド名"
+                placeholder="コマンド名"
+                value={definition.commandName}
+                onChange={(event) =>
+                  setStampDefinitions((current) =>
+                    current.map((item) =>
+                      item.id === definition.id
+                        ? { ...item, commandName: event.target.value }
+                        : item,
+                    ),
+                  )
+                }
+              />
+              <select
+                aria-label="画像ファイル"
+                value={definition.fileName}
+                onChange={(event) =>
+                  setStampDefinitions((current) =>
+                    current.map((item) =>
+                      item.id === definition.id ? { ...item, fileName: event.target.value } : item,
+                    ),
+                  )
+                }
+              >
+                <option value="">画像を選択</option>
+                {stampImageFiles.map((fileName) => (
+                  <option key={fileName} value={fileName}>
+                    {fileName}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  setStampDefinitions((current) =>
+                    current.filter((item) => item.id !== definition.id),
+                  )
+                }
+              >
+                削除
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="button-row">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              setStampDefinitions((current) => [
+                ...current,
+                { id: crypto.randomUUID(), commandName: '', fileName: stampImageFiles[0] ?? '' },
+              ])
+            }
+            disabled={stampImageFiles.length === 0}
+          >
+            スタンプを追加
+          </button>
+          <button type="button" onClick={() => void saveCustomStamps()}>
+            スタンプ設定を保存
+          </button>
+          {stampsSaved && <span className="saved-message">保存しました</span>}
+        </div>
+        <button type="button" onClick={() => void reloadCustomStamps()}>
+          画像一覧を再読み込み
+        </button>
       </section>
 
       <section className="panel" aria-labelledby="runtime-title">

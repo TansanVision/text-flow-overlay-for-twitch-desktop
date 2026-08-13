@@ -99,6 +99,41 @@ body.control-panel-page #root {
   color: #72e6a5;
 }
 
+.help-text {
+  color: #9d97a7;
+  font-size: 13px;
+}
+
+.stamp-editor {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+.stamp-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 8px;
+}
+.stamp-row input,
+.stamp-row select {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #484153;
+  border-radius: 8px;
+  color: inherit;
+  background: #111016;
+  font: inherit;
+}
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.control-panel .secondary-button {
+  background: #484153;
+}
+
 .authorization {
   display: flex;
   align-items: center;

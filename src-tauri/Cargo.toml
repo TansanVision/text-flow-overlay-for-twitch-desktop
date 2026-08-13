@@ -29,3 +29,4 @@ tauri-plugin-opener = "2.5.4"
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 tokio = { version = "1", features = ["time"] }
+base64 = "0.22"

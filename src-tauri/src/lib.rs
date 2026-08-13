@@ -6,6 +6,7 @@ use tauri::{webview::WebviewWindowBuilder, WebviewUrl};
 mod twitch_auth;
 mod twitch_chat;
 mod overlay_settings;
+mod custom_stamps;
 
 fn find_available_port() -> std::io::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -33,6 +34,10 @@ pub fn run() {
         data_directory.join("config").join("overlay.json"),
     )
     .expect("failed to load overlay settings");
+    let custom_stamps = custom_stamps::CustomStampsState::new(
+        data_directory.join("custom-stamps"),
+    )
+    .expect("failed to initialize custom stamps");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
@@ -41,13 +46,18 @@ pub fn run() {
             data_directory.join("auth").join("twitch-token.json"),
         ))
         .manage(settings)
+        .manage(custom_stamps)
         .invoke_handler(tauri::generate_handler![
             twitch_auth::start_twitch_device_authorization,
             twitch_auth::poll_twitch_device_authorization,
             twitch_auth::restore_twitch_authorization,
             twitch_auth::logout_twitch,
             overlay_settings::get_overlay_settings,
-            overlay_settings::save_overlay_settings
+            overlay_settings::save_overlay_settings,
+            custom_stamps::get_custom_stamps,
+            custom_stamps::reload_custom_stamps,
+            custom_stamps::get_custom_stamp_editor_data,
+            custom_stamps::save_custom_stamp_definitions
         ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
