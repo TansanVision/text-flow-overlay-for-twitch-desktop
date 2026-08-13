@@ -8,11 +8,14 @@ use crate::twitch_chat;
 const DEVICE_URL: &str = "https://id.twitch.tv/oauth2/device";
 const TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
 const VALIDATE_URL: &str = "https://id.twitch.tv/oauth2/validate";
-const CHAT_SCOPES: &str = "user:read:chat";
+const USERS_URL: &str = "https://api.twitch.tv/helix/users";
+const CHAT_SCOPES: &str =
+    "user:read:chat moderator:manage:shoutouts bits:read channel:read:subscriptions";
 
 pub struct TwitchAuthState {
     pending: Mutex<Option<PendingAuthorization>>,
     access_token: Mutex<Option<String>>,
+    user_id: Mutex<Option<String>>,
     token_path: PathBuf,
     chat_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
@@ -22,6 +25,7 @@ impl TwitchAuthState {
         Self {
             pending: Mutex::new(None),
             access_token: Mutex::new(None),
+            user_id: Mutex::new(None),
             token_path,
             chat_task: Mutex::new(None),
         }
@@ -77,6 +81,17 @@ struct ValidatedToken {
     scopes: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct UsersResponse {
+    data: Vec<TwitchUser>,
+}
+
+#[derive(Deserialize)]
+struct TwitchUser {
+    display_name: String,
+    profile_image_url: String,
+}
+
 #[derive(Serialize)]
 #[serde(
     tag = "status",
@@ -87,17 +102,25 @@ pub enum PollResult {
     Pending,
     Authorized {
         login: String,
+        display_name: String,
+        profile_image_url: Option<String>,
         user_id: String,
         scopes: Vec<String>,
     },
 }
 
 #[derive(Serialize)]
-#[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum RestoreResult {
     Disconnected,
     Authorized {
         login: String,
+        display_name: String,
+        profile_image_url: Option<String>,
         user_id: String,
         scopes: Vec<String>,
     },
@@ -197,6 +220,7 @@ pub async fn poll_twitch_device_authorization(
         .access_token
         .lock()
         .map_err(|error| error.to_string())? = Some(token.access_token.clone());
+    *state.user_id.lock().map_err(|error| error.to_string())? = Some(validated.user_id.clone());
     save_token(
         &state.token_path,
         &StoredToken {
@@ -207,7 +231,18 @@ pub async fn poll_twitch_device_authorization(
     start_chat(&app, &state, token.access_token, validated.user_id.clone())?;
     *state.pending.lock().map_err(|error| error.to_string())? = None;
 
+    let access_token = state
+        .access_token
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Twitchアクセストークンがありません".to_owned())?;
+    let profile = get_user_profile(&access_token, &validated.user_id).await;
     Ok(PollResult::Authorized {
+        display_name: profile
+            .as_ref()
+            .map_or_else(|| validated.login.clone(), |user| user.display_name.clone()),
+        profile_image_url: profile.map(|user| user.profile_image_url),
         login: validated.login,
         user_id: validated.user_id,
         scopes: validated.scopes,
@@ -223,15 +258,24 @@ pub async fn restore_twitch_authorization(
         return Ok(RestoreResult::Disconnected);
     }
 
-    let stored: StoredToken = serde_json::from_slice(
-        &fs::read(&state.token_path).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| format!("保存したTwitch認証情報を読み込めませんでした: {error}"))?;
+    let stored: StoredToken =
+        serde_json::from_slice(&fs::read(&state.token_path).map_err(|error| error.to_string())?)
+            .map_err(|error| format!("保存したTwitch認証情報を読み込めませんでした: {error}"))?;
 
     match validate_token(&stored.access_token).await {
-        Ok(validated) if validated.client_id == stored.client_id => {
-            *state.access_token.lock().map_err(|error| error.to_string())? =
-                Some(stored.access_token);
+        Ok(validated)
+            if validated.client_id == stored.client_id
+                && CHAT_SCOPES
+                    .split_whitespace()
+                    .all(|scope| validated.scopes.iter().any(|value| value == scope)) =>
+        {
+            let profile = get_user_profile(&stored.access_token, &validated.user_id).await;
+            *state
+                .access_token
+                .lock()
+                .map_err(|error| error.to_string())? = Some(stored.access_token);
+            *state.user_id.lock().map_err(|error| error.to_string())? =
+                Some(validated.user_id.clone());
             start_chat(
                 &app,
                 &state,
@@ -244,6 +288,10 @@ pub async fn restore_twitch_authorization(
                 validated.user_id.clone(),
             )?;
             Ok(RestoreResult::Authorized {
+                display_name: profile
+                    .as_ref()
+                    .map_or_else(|| validated.login.clone(), |user| user.display_name.clone()),
+                profile_image_url: profile.map(|user| user.profile_image_url),
                 login: validated.login,
                 user_id: validated.user_id,
                 scopes: validated.scopes,
@@ -256,11 +304,37 @@ pub async fn restore_twitch_authorization(
     }
 }
 
+async fn get_user_profile(access_token: &str, user_id: &str) -> Option<TwitchUser> {
+    reqwest::Client::new()
+        .get(USERS_URL)
+        .query(&[("id", user_id)])
+        .bearer_auth(access_token)
+        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .send()
+        .await
+        .ok()?
+        .json::<UsersResponse>()
+        .await
+        .ok()?
+        .data
+        .into_iter()
+        .next()
+}
+
 #[tauri::command]
 pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), String> {
-    *state.access_token.lock().map_err(|error| error.to_string())? = None;
+    *state
+        .access_token
+        .lock()
+        .map_err(|error| error.to_string())? = None;
+    *state.user_id.lock().map_err(|error| error.to_string())? = None;
     *state.pending.lock().map_err(|error| error.to_string())? = None;
-    if let Some(task) = state.chat_task.lock().map_err(|error| error.to_string())?.take() {
+    if let Some(task) = state
+        .chat_task
+        .lock()
+        .map_err(|error| error.to_string())?
+        .take()
+    {
         task.abort();
     }
     if state.token_path.exists() {
@@ -269,13 +343,56 @@ pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), Str
     Ok(())
 }
 
+#[tauri::command]
+pub async fn send_twitch_shoutout(
+    raider_user_id: String,
+    state: tauri::State<'_, TwitchAuthState>,
+) -> Result<(), String> {
+    let access_token = state
+        .access_token
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Twitchに接続されていません".to_owned())?;
+    let broadcaster_id = state
+        .user_id
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "TwitchユーザーIDがありません".to_owned())?;
+    let response = reqwest::Client::new()
+        .post("https://api.twitch.tv/helix/chat/shoutouts")
+        .query(&[
+            ("from_broadcaster_id", broadcaster_id.as_str()),
+            ("to_broadcaster_id", raider_user_id.as_str()),
+            ("moderator_id", broadcaster_id.as_str()),
+        ])
+        .bearer_auth(access_token)
+        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .send()
+        .await
+        .map_err(|error| format!("シャウトアウトに失敗しました: {error}"))?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        Err(format!("シャウトアウトに失敗しました ({status}): {body}"))
+    }
+}
+
 fn start_chat(
     app: &AppHandle,
     state: &TwitchAuthState,
     access_token: String,
     user_id: String,
 ) -> Result<(), String> {
-    if let Some(task) = state.chat_task.lock().map_err(|error| error.to_string())?.take() {
+    if let Some(task) = state
+        .chat_task
+        .lock()
+        .map_err(|error| error.to_string())?
+        .take()
+    {
         task.abort();
     }
     let task = twitch_chat::spawn(app.clone(), access_token, user_id.clone(), user_id);
@@ -285,7 +402,8 @@ fn start_chat(
 
 fn save_token(path: &PathBuf, token: &StoredToken) -> Result<(), String> {
     let contents = serde_json::to_vec_pretty(token).map_err(|error| error.to_string())?;
-    fs::write(path, contents).map_err(|error| format!("Twitch認証情報を保存できませんでした: {error}"))
+    fs::write(path, contents)
+        .map_err(|error| format!("Twitch認証情報を保存できませんでした: {error}"))
 }
 
 async fn validate_token(access_token: &str) -> Result<ValidatedToken, String> {

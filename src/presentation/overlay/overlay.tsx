@@ -4,6 +4,7 @@ import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { BuiltInEffect } from './built-in-effect';
 import { type CommentSize, type EffectCommand, parseCommands } from './comment-command';
+import { type Raid, RaidIntro } from './raid-intro';
 import './style.css';
 
 type ChatFragment =
@@ -16,9 +17,9 @@ type ChatFragment =
     };
 type RenderFragment =
   | ChatFragment
-  | { type: 'customStamp'; key: string; text: string; dataUri: string }
+  | { type: 'customStamp'; key: string; text: string; dataUri: string; effectType: string }
   | { type: 'externalEmote'; key: string; text: string; url: string };
-type CustomStamp = { commandName: string; dataUri: string };
+type CustomStamp = { commandName: string; dataUri: string; effectType: string };
 type ExternalEmote = { name: string; url: string; provider: string };
 type ExternalEmoteResult = { emotes: ExternalEmote[] };
 
@@ -30,11 +31,43 @@ type ChatMessage = {
   color?: string;
   alignment: string;
 };
-type IncomingChatMessage = { id: string; fragments: ChatFragment[] };
+type IncomingChatMessage = {
+  id: string;
+  fragments: ChatFragment[];
+  authorName?: string;
+  interactionType?: string;
+};
 type ActiveEffect = { id: string; type: EffectCommand };
 
-type OverlaySettings = { commentDurationSeconds: number; defaultSize: CommentSize };
-const defaultSettings: OverlaySettings = { commentDurationSeconds: 5, defaultSize: 'medium' };
+type OverlaySettings = {
+  commentDurationSeconds: number;
+  defaultSize: CommentSize;
+  raidClipsEnabled: boolean;
+  raidClipCount: number;
+  raidClipMuted: boolean;
+  raidIntroSeconds: number;
+  raidAutoShoutout: boolean;
+  enabledEffects: EffectCommand[];
+};
+const defaultSettings: OverlaySettings = {
+  commentDurationSeconds: 5,
+  defaultSize: 'medium',
+  raidClipsEnabled: true,
+  raidClipCount: 1,
+  raidClipMuted: false,
+  raidIntroSeconds: 15,
+  raidAutoShoutout: false,
+  enabledEffects: [
+    'sakura',
+    'snow',
+    'balloons',
+    'kamifubuki',
+    'rain',
+    'maruta',
+    'chikuwa',
+    'marutai',
+  ],
+};
 const maxLanes = { small: 25, medium: 16, big: 7 };
 
 function trimFragments(fragments: ChatFragment[], removeLength: number): ChatFragment[] {
@@ -54,7 +87,7 @@ function trimFragments(fragments: ChatFragment[], removeLength: number): ChatFra
 
 function expandCustomStamps(
   fragments: ChatFragment[],
-  stamps: Map<string, string>,
+  stamps: Map<string, CustomStamp>,
   externalEmotes: Map<string, string>,
 ): RenderFragment[] {
   const expanded: RenderFragment[] = [];
@@ -64,11 +97,17 @@ function expandCustomStamps(
       continue;
     }
     for (const [index, text] of fragment.text.split(/(\s+)/).filter(Boolean).entries()) {
-      const dataUri = stamps.get(text);
+      const stamp = stamps.get(text);
       const externalUrl = externalEmotes.get(text);
       expanded.push(
-        dataUri
-          ? { type: 'customStamp', key: `${fragment.key}-${index}`, text, dataUri }
+        stamp
+          ? {
+              type: 'customStamp',
+              key: `${fragment.key}-${index}`,
+              text,
+              dataUri: stamp.dataUri,
+              effectType: stamp.effectType,
+            }
           : externalUrl
             ? { type: 'externalEmote', key: `${fragment.key}-${index}`, text, url: externalUrl }
             : { ...fragment, key: `${fragment.key}-${index}`, text },
@@ -81,17 +120,32 @@ function expandCustomStamps(
 export function Overlay(): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
-  const [customStamps, setCustomStamps] = useState<Map<string, string>>(new Map());
+  const [customStamps, setCustomStamps] = useState<Map<string, CustomStamp>>(new Map());
   const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
   const [effects, setEffects] = useState<ActiveEffect[]>([]);
+  const [raids, setRaids] = useState<Raid[]>([]);
+
+  useEffect(() => {
+    const unlisten = listen<Raid>('twitch-raid', ({ payload }) => {
+      setRaids((current) => [...current, payload]);
+      void invoke('record_audience_interaction', { kind: 'raid', name: payload.displayName });
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
 
   useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
+      if (payload.authorName) {
+        void invoke('record_audience_interaction', {
+          kind: payload.interactionType ?? 'comment',
+          name: payload.authorName,
+        });
+      }
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
       const commands = parseCommands(fullText);
       const size = commands.size ?? settings.defaultSize;
       const effect = commands.effect;
-      if (effect) {
+      if (effect && settings.enabledEffects.includes(effect)) {
         setEffects((current) => [...current, { id: `${payload.id}-${effect}`, type: effect }]);
       }
       const fragments = expandCustomStamps(
@@ -115,7 +169,7 @@ export function Overlay(): React.JSX.Element {
     return () => {
       void unlisten.then((dispose) => dispose());
     };
-  }, [settings.defaultSize, customStamps, externalEmotes]);
+  }, [settings.defaultSize, settings.enabledEffects, customStamps, externalEmotes]);
 
   useEffect(() => {
     void invoke<OverlaySettings>('get_overlay_settings').then(setSettings);
@@ -138,7 +192,7 @@ export function Overlay(): React.JSX.Element {
 
   useEffect(() => {
     const applyStamps = (stamps: CustomStamp[]) => {
-      setCustomStamps(new Map(stamps.map((stamp) => [stamp.commandName, stamp.dataUri])));
+      setCustomStamps(new Map(stamps.map((stamp) => [stamp.commandName, stamp])));
     };
     void invoke<CustomStamp[]>('get_custom_stamps').then(applyStamps);
     const unlisten = listen<CustomStamp[]>('custom-stamps-updated', ({ payload }) => {
@@ -153,9 +207,24 @@ export function Overlay(): React.JSX.Element {
   const removeEffect = useCallback((id: string) => {
     setEffects((current) => current.filter((effect) => effect.id !== id));
   }, []);
+  const removeRaid = useCallback((id: string) => {
+    setRaids((current) => current.filter((raid) => raid.id !== id));
+  }, []);
 
   return (
     <main className="overlay" aria-label="Twitch Text Flow Overlay">
+      {raids[0] && (
+        <RaidIntro
+          key={raids[0].id}
+          raid={raids[0]}
+          duration={settings.raidIntroSeconds}
+          clipsEnabled={settings.raidClipsEnabled}
+          clipCount={settings.raidClipCount}
+          clipMuted={settings.raidClipMuted}
+          autoShoutout={settings.raidAutoShoutout}
+          onComplete={removeRaid}
+        />
+      )}
       {effects.map((effect) => (
         <BuiltInEffect
           key={effect.id}
@@ -184,7 +253,12 @@ export function Overlay(): React.JSX.Element {
             fragment.type === 'emote' ? (
               <img key={fragment.key} src={fragment.url} alt={fragment.text} />
             ) : fragment.type === 'customStamp' ? (
-              <img key={fragment.key} src={fragment.dataUri} alt={fragment.text} />
+              <img
+                key={fragment.key}
+                src={fragment.dataUri}
+                alt={fragment.text}
+                data-stamp-effect={fragment.effectType}
+              />
             ) : fragment.type === 'externalEmote' ? (
               <img key={fragment.key} src={fragment.url} alt={fragment.text} />
             ) : (

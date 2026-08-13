@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 const command = process.argv[2];
+const commandArguments = process.argv.slice(3);
 if (command !== 'dev' && command !== 'build') {
   throw new Error('Expected the Tauri command to be either "dev" or "build".');
 }
@@ -14,7 +15,7 @@ const executable = path.resolve(
   process.platform === 'win32' ? 'tauri.cmd' : 'tauri',
 );
 
-const child = spawn(executable, [command], {
+const child = spawn(executable, [command, ...commandArguments], {
   env: {
     ...process.env,
     PATH: `${cargoBin}${path.delimiter}${process.env.PATH ?? ''}`,

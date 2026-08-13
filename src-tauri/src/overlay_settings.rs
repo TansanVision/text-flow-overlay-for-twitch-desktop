@@ -4,10 +4,16 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct OverlaySettings {
     pub comment_duration_seconds: f64,
     pub default_size: String,
+    pub raid_clips_enabled: bool,
+    pub raid_clip_count: u8,
+    pub raid_clip_muted: bool,
+    pub raid_intro_seconds: u64,
+    pub raid_auto_shoutout: bool,
+    pub enabled_effects: Vec<String>,
 }
 
 impl Default for OverlaySettings {
@@ -15,6 +21,24 @@ impl Default for OverlaySettings {
         Self {
             comment_duration_seconds: 5.0,
             default_size: "medium".to_owned(),
+            raid_clips_enabled: true,
+            raid_clip_count: 1,
+            raid_clip_muted: false,
+            raid_intro_seconds: 15,
+            raid_auto_shoutout: false,
+            enabled_effects: vec![
+                "sakura",
+                "snow",
+                "balloons",
+                "kamifubuki",
+                "rain",
+                "maruta",
+                "chikuwa",
+                "marutai",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         }
     }
 }
@@ -73,10 +97,17 @@ fn validate(settings: &OverlaySettings) -> Result<(), String> {
     if !matches!(settings.default_size.as_str(), "small" | "medium" | "big") {
         return Err("既定サイズが不正です".into());
     }
+    if !(1..=5).contains(&settings.raid_clip_count) {
+        return Err("Raidクリップの再生本数は1～5件で指定してください".into());
+    }
+    if !(1..=60).contains(&settings.raid_intro_seconds) {
+        return Err("Raidイントロの表示時間は1～60秒で指定してください".into());
+    }
     Ok(())
 }
 
 fn write_settings(path: &PathBuf, settings: &OverlaySettings) -> Result<(), String> {
     let contents = serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?;
-    fs::write(path, contents).map_err(|error| format!("オーバーレイ設定を保存できませんでした: {error}"))
+    fs::write(path, contents)
+        .map_err(|error| format!("オーバーレイ設定を保存できませんでした: {error}"))
 }

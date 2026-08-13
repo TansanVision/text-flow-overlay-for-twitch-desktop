@@ -1,13 +1,14 @@
 use std::{fs, net::TcpListener, path::PathBuf};
 
-use tauri::Manager;
 use tauri::{webview::WebviewWindowBuilder, WebviewUrl};
+use tauri::{Emitter, Manager};
 
-mod twitch_auth;
-mod twitch_chat;
-mod overlay_settings;
+mod audience;
 mod custom_stamps;
 mod external_emotes;
+mod overlay_settings;
+mod twitch_auth;
+mod twitch_chat;
 
 fn find_available_port() -> std::io::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -35,10 +36,8 @@ pub fn run() {
         data_directory.join("config").join("overlay.json"),
     )
     .expect("failed to load overlay settings");
-    let custom_stamps = custom_stamps::CustomStampsState::new(
-        data_directory.join("custom-stamps"),
-    )
-    .expect("failed to initialize custom stamps");
+    let custom_stamps = custom_stamps::CustomStampsState::new(data_directory.join("custom-stamps"))
+        .expect("failed to initialize custom stamps");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
@@ -48,18 +47,26 @@ pub fn run() {
         ))
         .manage(settings)
         .manage(custom_stamps)
+        .manage(audience::AudienceState::new(
+            data_directory.join("audience.md"),
+        ))
         .invoke_handler(tauri::generate_handler![
             twitch_auth::start_twitch_device_authorization,
             twitch_auth::poll_twitch_device_authorization,
             twitch_auth::restore_twitch_authorization,
             twitch_auth::logout_twitch,
+            twitch_auth::send_twitch_shoutout,
             overlay_settings::get_overlay_settings,
             overlay_settings::save_overlay_settings,
             custom_stamps::get_custom_stamps,
             custom_stamps::reload_custom_stamps,
             custom_stamps::get_custom_stamp_editor_data,
             custom_stamps::save_custom_stamp_definitions,
-            external_emotes::get_external_emotes
+            external_emotes::get_external_emotes,
+            audience::record_audience_interaction,
+            audience::save_audience_interactions,
+            audience::clear_audience_interactions,
+            emit_overlay_test
         ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
@@ -108,4 +115,18 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn emit_overlay_test(
+    app: tauri::AppHandle,
+    event: String,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    match event.as_str() {
+        "twitch-chat-message" | "twitch-raid" => app
+            .emit_to("overlay", &event, payload)
+            .map_err(|error| error.to_string()),
+        _ => Err("許可されていないテストイベントです".into()),
+    }
 }

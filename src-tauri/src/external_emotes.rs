@@ -55,15 +55,27 @@ fn add_provider(
 ) {
     match result {
         Ok(emotes) => {
-            statuses.push(ProviderStatus { provider, count: emotes.len(), error: None });
+            statuses.push(ProviderStatus {
+                provider,
+                count: emotes.len(),
+                error: None,
+            });
             all_emotes.extend(emotes);
         }
-        Err(error) => statuses.push(ProviderStatus { provider, count: 0, error: Some(error) }),
+        Err(error) => statuses.push(ProviderStatus {
+            provider,
+            count: 0,
+            error: Some(error),
+        }),
     }
 }
 
 async fn load_bttv(client: &reqwest::Client) -> Result<Vec<ExternalEmote>, String> {
-    let response = client.get(BTTV_GLOBAL_URL).send().await.map_err(|error| error.to_string())?;
+    let response = client
+        .get(BTTV_GLOBAL_URL)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()));
     }
@@ -84,11 +96,18 @@ async fn load_bttv(client: &reqwest::Client) -> Result<Vec<ExternalEmote>, Strin
 }
 
 async fn load_seven_tv(client: &reqwest::Client) -> Result<Vec<ExternalEmote>, String> {
-    let response = client.get(SEVEN_TV_GLOBAL_URL).send().await.map_err(|error| error.to_string())?;
+    let response = client
+        .get(SEVEN_TV_GLOBAL_URL)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()));
     }
-    let value = response.json::<Value>().await.map_err(|error| error.to_string())?;
+    let value = response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())?;
     let emotes = value["emotes"]
         .as_array()
         .or_else(|| value["data"]["emotes"].as_array())
@@ -104,7 +123,11 @@ fn convert_seven_tv_emote(value: &Value) -> Option<ExternalEmote> {
     let files = host["files"].as_array()?;
     let file = ["4x.webp", "3x.webp", "2x.webp"]
         .iter()
-        .find_map(|wanted| files.iter().find(|file| file["name"].as_str() == Some(wanted)))
+        .find_map(|wanted| {
+            files
+                .iter()
+                .find(|file| file["name"].as_str() == Some(wanted))
+        })
         .or_else(|| files.first())?;
     let file_name = file["name"].as_str()?;
     let base = if host_url.starts_with("//") {

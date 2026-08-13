@@ -112,6 +112,21 @@ body.overlay-page #root,
   vertical-align: middle;
 }
 
+.chat-message img[data-stamp-effect="falling"] {
+  position: fixed;
+  top: -15vh;
+  left: var(--stamp-left, 50vw);
+  width: auto;
+  height: 12vh;
+  animation: stamp-fall 5s linear forwards;
+}
+
+@keyframes stamp-fall {
+  to {
+    transform: translate3d(8vw, 125vh, 0) rotate(540deg);
+  }
+}
+
 .built-in-effect {
   position: absolute;
   inset: 0;
@@ -180,6 +195,83 @@ body.overlay-page #root,
   display: block;
   width: 100%;
   height: auto;
+}
+
+.raid-intro {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 280px;
+  padding: 18px;
+  border: 1px solid rgba(177, 119, 255, 0.6);
+  border-radius: 12px;
+  color: white;
+  background: rgba(18, 12, 28, 0.9);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, sans-serif;
+}
+
+.raid-intro img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.raid-intro strong {
+  font-size: 20px;
+}
+.raid-intro p {
+  margin: 4px 0;
+  font-weight: 700;
+}
+.raid-intro small {
+  color: #cfc5dc;
+}
+
+.raid-clip-player {
+  position: absolute;
+  top: 50%;
+  left: 1vw;
+  z-index: 1000;
+  width: 40vw;
+  min-width: 400px;
+  height: 70vh;
+  overflow: hidden;
+  border: 1px solid rgba(177, 119, 255, 0.7);
+  border-radius: 12px;
+  background: #08060d;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  transform: translateY(-50%);
+  font-family: system-ui, sans-serif;
+}
+
+.raid-clip-player header {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  height: 44px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: white;
+  background: rgba(18, 12, 28, 0.95);
+  white-space: nowrap;
+}
+
+.raid-clip-player header span {
+  overflow: hidden;
+  color: #cfc5dc;
+  text-overflow: ellipsis;
+}
+
+.raid-clip-player iframe {
+  width: 100%;
+  height: calc(100% - 44px);
+  border: 0;
 }
 
 @keyframes particle-fall {

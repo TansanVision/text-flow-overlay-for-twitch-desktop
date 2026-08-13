@@ -9,6 +9,8 @@ use tauri::{AppHandle, Emitter};
 pub struct StampDefinition {
     command_name: String,
     file_name: String,
+    #[serde(default = "default_effect_type")]
+    effect_type: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -16,6 +18,7 @@ pub struct StampDefinition {
 pub struct CustomStamp {
     command_name: String,
     data_uri: String,
+    effect_type: String,
 }
 
 #[derive(Serialize)]
@@ -37,7 +40,10 @@ impl CustomStampsState {
             fs::write(&config_path, b"[]\n")
                 .map_err(|error| format!("カスタムスタンプ設定を作成できませんでした: {error}"))?;
         }
-        Ok(Self { directory, config_path })
+        Ok(Self {
+            directory,
+            config_path,
+        })
     }
 
     fn load(&self) -> Result<Vec<CustomStamp>, String> {
@@ -74,7 +80,10 @@ impl CustomStampsState {
         }
         let requested = PathBuf::from(&definition.file_name);
         if requested.components().count() != 1 {
-            return Err(format!("不正なスタンプファイル名です: {}", definition.file_name));
+            return Err(format!(
+                "不正なスタンプファイル名です: {}",
+                definition.file_name
+            ));
         }
         let mime = match requested
             .extension()
@@ -93,22 +102,37 @@ impl CustomStampsState {
         Ok(CustomStamp {
             command_name: command_name.to_owned(),
             data_uri: format!("data:{mime};base64,{}", STANDARD.encode(bytes)),
+            effect_type: match definition.effect_type.as_str() {
+                "falling" => "falling".to_owned(),
+                _ => "default".to_owned(),
+            },
         })
     }
 }
 
+fn default_effect_type() -> String {
+    "default".to_owned()
+}
+
 #[tauri::command]
-pub fn get_custom_stamps(state: tauri::State<'_, CustomStampsState>) -> Result<Vec<CustomStamp>, String> {
+pub fn get_custom_stamps(
+    state: tauri::State<'_, CustomStampsState>,
+) -> Result<Vec<CustomStamp>, String> {
     state.load()
 }
 
 #[tauri::command]
-pub fn reload_custom_stamps(app: AppHandle, state: tauri::State<'_, CustomStampsState>) -> Result<Vec<CustomStamp>, String> {
+pub fn reload_custom_stamps(
+    app: AppHandle,
+    state: tauri::State<'_, CustomStampsState>,
+) -> Result<Vec<CustomStamp>, String> {
     emit_stamps(&app, state.load()?)
 }
 
 #[tauri::command]
-pub fn get_custom_stamp_editor_data(state: tauri::State<'_, CustomStampsState>) -> Result<CustomStampEditorData, String> {
+pub fn get_custom_stamp_editor_data(
+    state: tauri::State<'_, CustomStampsState>,
+) -> Result<CustomStampEditorData, String> {
     Ok(CustomStampEditorData {
         definitions: state.load_definitions()?,
         image_files: state.image_files()?,

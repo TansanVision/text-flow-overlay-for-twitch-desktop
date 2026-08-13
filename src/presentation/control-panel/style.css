@@ -138,6 +138,38 @@ body.control-panel-page #root {
   background: #484153;
 }
 
+.test-comment-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.test-comment-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #484153;
+  border-radius: 8px;
+  color: inherit;
+  background: #111016;
+  font: inherit;
+}
+.effect-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.effect-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .authorization {
   display: flex;
   align-items: center;
@@ -159,6 +191,21 @@ body.control-panel-page #root {
   color: #fff;
   font-size: 22px;
   letter-spacing: 0.14em;
+}
+
+.connected-user-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.connected-user-details {
+  flex: 1;
+  min-width: 0;
+}
+.connected-user-details small {
+  color: #9d97a7;
 }
 
 .success,

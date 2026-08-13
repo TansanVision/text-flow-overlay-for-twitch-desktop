@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -13,36 +14,74 @@ type DeviceAuthorization = {
 
 type PollResult =
   | { status: 'pending' }
-  | { status: 'authorized'; login: string; userId: string; scopes: string[] };
+  | {
+      status: 'authorized';
+      login: string;
+      displayName: string;
+      profileImageUrl?: string;
+      userId: string;
+      scopes: string[];
+    };
 
 type RestoreResult =
   | { status: 'disconnected' }
-  | { status: 'authorized'; login: string; userId: string; scopes: string[] };
+  | {
+      status: 'authorized';
+      login: string;
+      displayName: string;
+      profileImageUrl?: string;
+      userId: string;
+      scopes: string[];
+    };
+
+type ConnectedUser = { login: string; displayName: string; profileImageUrl?: string };
 
 type OverlaySettings = {
   commentDurationSeconds: number;
   defaultSize: 'small' | 'medium' | 'big';
+  raidClipsEnabled: boolean;
+  raidClipCount: number;
+  raidClipMuted: boolean;
+  raidIntroSeconds: number;
+  raidAutoShoutout: boolean;
+  enabledEffects: string[];
 };
 type CustomStamp = { commandName: string; dataUri: string };
-type StampDefinition = { commandName: string; fileName: string };
+type StampDefinition = { commandName: string; fileName: string; effectType: 'default' | 'falling' };
 type StampEditorData = { definitions: StampDefinition[]; imageFiles: string[] };
 type EditableStampDefinition = StampDefinition & { id: string };
 type ExternalEmoteResult = {
   emotes: { name: string; url: string; provider: string }[];
   providers: { provider: string; count: number; error?: string }[];
 };
+type AudienceStatus = { total: number; path: string };
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
 export function ControlPanel(): React.JSX.Element {
   const [authorization, setAuthorization] = useState<DeviceAuthorization>();
-  const [connectedUser, setConnectedUser] = useState<string>();
+  const [connectedUser, setConnectedUser] = useState<ConnectedUser>();
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
   const [overlaySettings, setOverlaySettings] = useState<OverlaySettings>({
     commentDurationSeconds: 5,
     defaultSize: 'medium',
+    raidClipsEnabled: true,
+    raidClipCount: 1,
+    raidClipMuted: false,
+    raidIntroSeconds: 15,
+    raidAutoShoutout: false,
+    enabledEffects: [
+      'sakura',
+      'snow',
+      'balloons',
+      'kamifubuki',
+      'rain',
+      'maruta',
+      'chikuwa',
+      'marutai',
+    ],
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [customStampCount, setCustomStampCount] = useState(0);
@@ -51,6 +90,10 @@ export function ControlPanel(): React.JSX.Element {
   const [stampsSaved, setStampsSaved] = useState(false);
   const [externalEmoteStatus, setExternalEmoteStatus] = useState<ExternalEmoteResult>();
   const [isLoadingExternalEmotes, setIsLoadingExternalEmotes] = useState(false);
+  const [testComment, setTestComment] = useState('medium white テストコメント');
+  const [testClipId, setTestClipId] = useState('');
+  const [testClipDuration, setTestClipDuration] = useState(30);
+  const [audienceStatus, setAudienceStatus] = useState<AudienceStatus>();
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
@@ -58,6 +101,49 @@ export function ControlPanel(): React.JSX.Element {
       .then(setOverlaySettings)
       .catch((reason: unknown) => setError(String(reason)));
   }, []);
+
+  useEffect(() => {
+    const unlisten = listen<AudienceStatus>('audience-auto-saved', ({ payload }) => {
+      setAudienceStatus(payload);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  const sendTestComment = async (text = testComment) => {
+    await invoke('emit_overlay_test', {
+      event: 'twitch-chat-message',
+      payload: {
+        id: crypto.randomUUID(),
+        fragments: [{ type: 'text', key: '0', text }],
+      },
+    });
+  };
+
+  const sendTestRaid = async (withClip = false) => {
+    const clipId = extractClipId(testClipId);
+    await invoke('emit_overlay_test', {
+      event: 'twitch-raid',
+      payload: {
+        id: crypto.randomUUID(),
+        displayName: 'テスト配信者',
+        login: 'test_streamer',
+        broadcasterUserId: '',
+        viewerCount: 123,
+        clips:
+          withClip && clipId
+            ? [
+                {
+                  id: clipId,
+                  title: 'コンパネからのテストクリップ',
+                  embedUrl: `https://clips.twitch.tv/embed?clip=${encodeURIComponent(clipId)}`,
+                  duration: testClipDuration,
+                  viewCount: 0,
+                },
+              ]
+            : [],
+      },
+    });
+  };
 
   useEffect(() => {
     void invoke<StampEditorData>('get_custom_stamp_editor_data')
@@ -74,7 +160,13 @@ export function ControlPanel(): React.JSX.Element {
   useEffect(() => {
     void invoke<RestoreResult>('restore_twitch_authorization')
       .then((result) => {
-        if (result.status === 'authorized') setConnectedUser(result.login);
+        if (result.status === 'authorized') {
+          setConnectedUser({
+            login: result.login,
+            displayName: result.displayName,
+            profileImageUrl: result.profileImageUrl,
+          });
+        }
       })
       .catch((reason: unknown) => setError(String(reason)))
       .finally(() => setIsRestoring(false));
@@ -88,7 +180,11 @@ export function ControlPanel(): React.JSX.Element {
       void invoke<PollResult>('poll_twitch_device_authorization')
         .then((result) => {
           if (!cancelled && result.status === 'authorized') {
-            setConnectedUser(result.login);
+            setConnectedUser({
+              login: result.login,
+              displayName: result.displayName,
+              profileImageUrl: result.profileImageUrl,
+            });
             setAuthorization(undefined);
             setError(undefined);
           }
@@ -163,9 +259,10 @@ export function ControlPanel(): React.JSX.Element {
   const saveCustomStamps = async () => {
     try {
       const stamps = await invoke<CustomStamp[]>('save_custom_stamp_definitions', {
-        definitions: stampDefinitions.map(({ commandName, fileName }) => ({
+        definitions: stampDefinitions.map(({ commandName, fileName, effectType }) => ({
           commandName,
           fileName,
+          effectType,
         })),
       });
       setCustomStampCount(stamps.length);
@@ -187,6 +284,20 @@ export function ControlPanel(): React.JSX.Element {
     } finally {
       setIsLoadingExternalEmotes(false);
     }
+  };
+
+  const saveAudience = async () => {
+    try {
+      setAudienceStatus(await invoke<AudienceStatus>('save_audience_interactions'));
+      setError(undefined);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
+  const clearAudience = async () => {
+    await invoke('clear_audience_interactions');
+    setAudienceStatus(undefined);
   };
 
   useEffect(() => {
@@ -225,7 +336,13 @@ export function ControlPanel(): React.JSX.Element {
 
         {connectedUser && (
           <div className="authorization">
-            <p className="success">接続済み: {connectedUser}</p>
+            {connectedUser.profileImageUrl && (
+              <img className="connected-user-avatar" src={connectedUser.profileImageUrl} alt="" />
+            )}
+            <div className="connected-user-details">
+              <p className="success">接続済み: {connectedUser.displayName}</p>
+              <small>@{connectedUser.login}</small>
+            </div>
             <button type="button" onClick={() => void logout()}>
               ログアウト
             </button>
@@ -291,6 +408,117 @@ export function ControlPanel(): React.JSX.Element {
         {settingsSaved && <span className="saved-message">保存しました</span>}
       </section>
 
+      <section className="panel" aria-labelledby="effect-settings-title">
+        <h2 id="effect-settings-title">内蔵エフェクト設定</h2>
+        <div className="effect-buttons">
+          {['sakura', 'snow', 'balloons', 'kamifubuki', 'rain', 'maruta', 'chikuwa', 'marutai'].map(
+            (effect) => (
+              <label key={effect} className="effect-toggle">
+                <input
+                  type="checkbox"
+                  checked={overlaySettings.enabledEffects.includes(effect)}
+                  onChange={(event) =>
+                    setOverlaySettings((current) => ({
+                      ...current,
+                      enabledEffects: event.target.checked
+                        ? [...current.enabledEffects, effect]
+                        : current.enabledEffects.filter((value) => value !== effect),
+                    }))
+                  }
+                />
+                {effect}
+              </label>
+            ),
+          )}
+        </div>
+        <button type="button" onClick={() => void saveSettings()}>
+          エフェクト設定を保存
+        </button>
+        {settingsSaved && <span className="saved-message">保存しました</span>}
+      </section>
+
+      <section className="panel" aria-labelledby="raid-settings-title">
+        <h2 id="raid-settings-title">Raidクリップ設定</h2>
+        <div className="settings-grid">
+          <label htmlFor="raid-clips-enabled">クリップ再生</label>
+          <input
+            id="raid-clips-enabled"
+            type="checkbox"
+            checked={overlaySettings.raidClipsEnabled}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidClipsEnabled: event.target.checked,
+              }))
+            }
+          />
+          <label htmlFor="raid-intro-seconds">イントロ表示（秒）</label>
+          <input
+            id="raid-intro-seconds"
+            type="number"
+            min="1"
+            max="60"
+            value={overlaySettings.raidIntroSeconds}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidIntroSeconds: Number(event.target.value),
+              }))
+            }
+          />
+          <label htmlFor="raid-clip-count">再生本数</label>
+          <select
+            id="raid-clip-count"
+            value={overlaySettings.raidClipCount}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidClipCount: Number(event.target.value),
+              }))
+            }
+          >
+            {[1, 2, 3, 4, 5].map((count) => (
+              <option key={count} value={count}>
+                {count}件
+              </option>
+            ))}
+          </select>
+          <label htmlFor="raid-clip-muted">クリップ音声</label>
+          <select
+            id="raid-clip-muted"
+            value={overlaySettings.raidClipMuted ? 'muted' : 'sound'}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidClipMuted: event.target.value === 'muted',
+              }))
+            }
+          >
+            <option value="sound">音声あり</option>
+            <option value="muted">ミュート</option>
+          </select>
+          <label htmlFor="raid-auto-shoutout">終了後シャウトアウト</label>
+          <input
+            id="raid-auto-shoutout"
+            type="checkbox"
+            checked={overlaySettings.raidAutoShoutout}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidAutoShoutout: event.target.checked,
+              }))
+            }
+          />
+        </div>
+        <p className="help-text">
+          再生時間はTwitchから取得した各クリップの実時間を使用します。公式プレイヤーの制約により、音量は数値ではなく音声あり／ミュートで設定します。
+        </p>
+        <button type="button" onClick={() => void saveSettings()}>
+          Raid設定を保存
+        </button>
+        {settingsSaved && <span className="saved-message">保存しました</span>}
+      </section>
+
       <section className="panel" aria-labelledby="custom-stamps-title">
         <h2 id="custom-stamps-title">カスタムスタンプ</h2>
         <p>読み込み済み: {customStampCount}件</p>
@@ -332,6 +560,22 @@ export function ControlPanel(): React.JSX.Element {
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="表示方式"
+                value={definition.effectType}
+                onChange={(event) =>
+                  setStampDefinitions((current) =>
+                    current.map((item) =>
+                      item.id === definition.id
+                        ? { ...item, effectType: event.target.value as 'default' | 'falling' }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                <option value="default">コメント内</option>
+                <option value="falling">画面上から落下</option>
+              </select>
               <button
                 className="secondary-button"
                 type="button"
@@ -353,7 +597,12 @@ export function ControlPanel(): React.JSX.Element {
             onClick={() =>
               setStampDefinitions((current) => [
                 ...current,
-                { id: crypto.randomUUID(), commandName: '', fileName: stampImageFiles[0] ?? '' },
+                {
+                  id: crypto.randomUUID(),
+                  commandName: '',
+                  fileName: stampImageFiles[0] ?? '',
+                  effectType: 'default',
+                },
               ])
             }
             disabled={stampImageFiles.length === 0}
@@ -383,6 +632,102 @@ export function ControlPanel(): React.JSX.Element {
           <dd>別ウィンドウで起動中</dd>
         </dl>
       </section>
+
+      <section className="panel" aria-labelledby="audience-title">
+        <h2 id="audience-title">反応ユーザー記録</h2>
+        <p className="help-text">
+          コメント、Bits、サブスク、ギフト、Raidを種類別に重複なしで記録します。自分が別チャンネルへRaidすると自動的にaudience.mdへ保存します。
+        </p>
+        <div className="button-row">
+          <button type="button" onClick={() => void saveAudience()}>
+            audience.mdへ保存
+          </button>
+          <button className="secondary-button" type="button" onClick={() => void clearAudience()}>
+            記録をクリア
+          </button>
+        </div>
+        {audienceStatus && (
+          <p className="success">
+            {audienceStatus.total}件を保存しました: {audienceStatus.path}
+          </p>
+        )}
+      </section>
+
+      <section className="panel" aria-labelledby="overlay-test-title">
+        <h2 id="overlay-test-title">オーバーレイテスト</h2>
+        <div className="test-comment-row">
+          <input
+            value={testComment}
+            onChange={(event) => setTestComment(event.target.value)}
+            aria-label="テストコメント"
+          />
+          <button
+            type="button"
+            onClick={() => void sendTestComment()}
+            disabled={!testComment.trim()}
+          >
+            コメント表示
+          </button>
+        </div>
+        <div className="effect-buttons">
+          {['sakura', 'snow', 'balloons', 'kamifubuki', 'rain', 'maruta', 'chikuwa', 'marutai'].map(
+            (effect) => (
+              <button
+                className="secondary-button"
+                type="button"
+                key={effect}
+                onClick={() => void sendTestComment(effect)}
+              >
+                {effect}
+              </button>
+            ),
+          )}
+        </div>
+        <button type="button" onClick={() => void sendTestRaid()}>
+          Raidイントロを表示
+        </button>
+        <div className="test-comment-row">
+          <input
+            value={testClipId}
+            onChange={(event) => setTestClipId(event.target.value)}
+            aria-label="テストするTwitchクリップURLまたはID"
+            placeholder="TwitchクリップURLまたはクリップID"
+          />
+          <button
+            type="button"
+            onClick={() => void sendTestRaid(true)}
+            disabled={!extractClipId(testClipId)}
+          >
+            Raid＋クリップを表示
+          </button>
+        </div>
+        <div className="settings-grid test-clip-duration">
+          <label htmlFor="test-clip-duration">テスト再生時間（秒）</label>
+          <input
+            id="test-clip-duration"
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            value={testClipDuration}
+            onChange={(event) => setTestClipDuration(Number(event.target.value))}
+          />
+        </div>
+      </section>
     </main>
   );
+}
+
+function extractClipId(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === 'clips.twitch.tv') return url.pathname.split('/').filter(Boolean)[0] ?? '';
+    const segments = url.pathname.split('/').filter(Boolean);
+    const clipIndex = segments.indexOf('clip');
+    return clipIndex >= 0 ? (segments[clipIndex + 1] ?? '') : '';
+  } catch {
+    return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : '';
+  }
 }
