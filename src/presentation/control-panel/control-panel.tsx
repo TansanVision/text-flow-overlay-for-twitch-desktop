@@ -19,6 +19,11 @@ type RestoreResult =
   | { status: 'disconnected' }
   | { status: 'authorized'; login: string; userId: string; scopes: string[] };
 
+type OverlaySettings = {
+  commentDurationSeconds: number;
+  defaultSize: 'small' | 'medium' | 'big';
+};
+
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
 export function ControlPanel(): React.JSX.Element {
@@ -27,7 +32,18 @@ export function ControlPanel(): React.JSX.Element {
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
+  const [overlaySettings, setOverlaySettings] = useState<OverlaySettings>({
+    commentDurationSeconds: 5,
+    defaultSize: 'medium',
+  });
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
+
+  useEffect(() => {
+    void invoke<OverlaySettings>('get_overlay_settings')
+      .then(setOverlaySettings)
+      .catch((reason: unknown) => setError(String(reason)));
+  }, []);
 
   useEffect(() => {
     void invoke<RestoreResult>('restore_twitch_authorization')
@@ -93,6 +109,16 @@ export function ControlPanel(): React.JSX.Element {
     }
   };
 
+  const saveSettings = async () => {
+    try {
+      await invoke('save_overlay_settings', { settings: overlaySettings });
+      setSettingsSaved(true);
+      window.setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
   return (
     <main className="control-panel">
       <header>
@@ -128,6 +154,46 @@ export function ControlPanel(): React.JSX.Element {
           </div>
         )}
         {error && <p className="error">{error}</p>}
+      </section>
+
+      <section className="panel" aria-labelledby="overlay-settings-title">
+        <h2 id="overlay-settings-title">コメント表示設定</h2>
+        <div className="settings-grid">
+          <label htmlFor="default-size">既定サイズ</label>
+          <select
+            id="default-size"
+            value={overlaySettings.defaultSize}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                defaultSize: event.target.value as OverlaySettings['defaultSize'],
+              }))
+            }
+          >
+            <option value="small">小</option>
+            <option value="medium">中</option>
+            <option value="big">大</option>
+          </select>
+          <label htmlFor="comment-duration">表示時間（秒）</label>
+          <input
+            id="comment-duration"
+            type="number"
+            min="1"
+            max="30"
+            step="0.5"
+            value={overlaySettings.commentDurationSeconds}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                commentDurationSeconds: Number(event.target.value),
+              }))
+            }
+          />
+        </div>
+        <button type="button" onClick={() => void saveSettings()}>
+          設定を保存
+        </button>
+        {settingsSaved && <span className="saved-message">保存しました</span>}
       </section>
 
       <section className="panel" aria-labelledby="runtime-title">

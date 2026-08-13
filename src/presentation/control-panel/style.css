@@ -73,6 +73,32 @@ body.control-panel-page #root {
   opacity: 0.45;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: 10rem minmax(10rem, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.settings-grid label {
+  color: #c7c2cf;
+}
+.settings-grid select,
+.settings-grid input {
+  padding: 9px 10px;
+  border: 1px solid #484153;
+  border-radius: 8px;
+  color: inherit;
+  background: #111016;
+  font: inherit;
+}
+
+.saved-message {
+  margin-left: 12px;
+  color: #72e6a5;
+}
+
 .authorization {
   display: flex;
   align-items: center;

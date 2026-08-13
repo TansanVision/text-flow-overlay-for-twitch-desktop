@@ -19,6 +19,13 @@ body.overlay-page #root,
   }
 }
 
+@keyframes stay-visible {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
 .chat-message {
   position: absolute;
   left: 0;
@@ -27,9 +34,8 @@ body.overlay-page #root,
   width: max-content;
   margin: 0;
   color: #fff;
-  font:
-    6vh system-ui,
-    sans-serif;
+  font-family: system-ui, sans-serif;
+  font-size: 6vh;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -40,6 +46,63 @@ body.overlay-page #root,
     2px -2px 0 #000,
     -2px -2px 0 #000;
   animation: flow-left 5s linear forwards;
+}
+
+.chat-message[data-size="small"] {
+  font-size: 4vh;
+}
+.chat-message[data-size="big"] {
+  font-size: 18vh;
+}
+.chat-message[data-alignment]:not([data-alignment="flow"]) {
+  animation-name: stay-visible;
+}
+.chat-message[data-alignment="ue"] {
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chat-message[data-alignment="naka"] {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.chat-message[data-alignment="shita"] {
+  top: auto;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chat-message[data-alignment="migi"] {
+  top: 50%;
+  right: 5px;
+  left: auto;
+  transform: translateY(-50%);
+}
+.chat-message[data-alignment="hidari"] {
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+}
+.chat-message[data-alignment="migiue"] {
+  top: 5px;
+  right: 5px;
+  left: auto;
+}
+.chat-message[data-alignment="migishita"] {
+  top: auto;
+  right: 5px;
+  bottom: 20px;
+  left: auto;
+}
+.chat-message[data-alignment="hidariue"] {
+  top: 5px;
+  left: 5px;
+}
+.chat-message[data-alignment="hidarishita"] {
+  top: auto;
+  bottom: 20px;
+  left: 5px;
 }
 
 .chat-message img {

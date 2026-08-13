@@ -5,6 +5,7 @@ use tauri::{webview::WebviewWindowBuilder, WebviewUrl};
 
 mod twitch_auth;
 mod twitch_chat;
+mod overlay_settings;
 
 fn find_available_port() -> std::io::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -28,6 +29,10 @@ pub fn run() {
     let port = find_available_port().expect("failed to find an available localhost port");
     let data_directory =
         create_portable_data_directories().expect("failed to create portable data directories");
+    let settings = overlay_settings::OverlaySettingsState::load(
+        data_directory.join("config").join("overlay.json"),
+    )
+    .expect("failed to load overlay settings");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
@@ -35,11 +40,14 @@ pub fn run() {
         .manage(twitch_auth::TwitchAuthState::new(
             data_directory.join("auth").join("twitch-token.json"),
         ))
+        .manage(settings)
         .invoke_handler(tauri::generate_handler![
             twitch_auth::start_twitch_device_authorization,
             twitch_auth::poll_twitch_device_authorization,
             twitch_auth::restore_twitch_authorization,
-            twitch_auth::logout_twitch
+            twitch_auth::logout_twitch,
+            overlay_settings::get_overlay_settings,
+            overlay_settings::save_overlay_settings
         ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
