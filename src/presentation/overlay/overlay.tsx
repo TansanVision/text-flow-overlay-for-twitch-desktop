@@ -15,8 +15,11 @@ type ChatFragment =
     };
 type RenderFragment =
   | ChatFragment
-  | { type: 'customStamp'; key: string; text: string; dataUri: string };
+  | { type: 'customStamp'; key: string; text: string; dataUri: string }
+  | { type: 'externalEmote'; key: string; text: string; url: string };
 type CustomStamp = { commandName: string; dataUri: string };
+type ExternalEmote = { name: string; url: string; provider: string };
+type ExternalEmoteResult = { emotes: ExternalEmote[] };
 
 type ChatMessage = {
   id: string;
@@ -50,6 +53,7 @@ function trimFragments(fragments: ChatFragment[], removeLength: number): ChatFra
 function expandCustomStamps(
   fragments: ChatFragment[],
   stamps: Map<string, string>,
+  externalEmotes: Map<string, string>,
 ): RenderFragment[] {
   const expanded: RenderFragment[] = [];
   for (const fragment of fragments) {
@@ -59,10 +63,13 @@ function expandCustomStamps(
     }
     for (const [index, text] of fragment.text.split(/(\s+)/).filter(Boolean).entries()) {
       const dataUri = stamps.get(text);
+      const externalUrl = externalEmotes.get(text);
       expanded.push(
         dataUri
           ? { type: 'customStamp', key: `${fragment.key}-${index}`, text, dataUri }
-          : { ...fragment, key: `${fragment.key}-${index}`, text },
+          : externalUrl
+            ? { type: 'externalEmote', key: `${fragment.key}-${index}`, text, url: externalUrl }
+            : { ...fragment, key: `${fragment.key}-${index}`, text },
       );
     }
   }
@@ -73,6 +80,7 @@ export function Overlay(): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
   const [customStamps, setCustomStamps] = useState<Map<string, string>>(new Map());
+  const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
@@ -86,6 +94,7 @@ export function Overlay(): React.JSX.Element {
           fragments: expandCustomStamps(
             trimFragments(payload.fragments, commands.removeLength),
             customStamps,
+            externalEmotes,
           ),
           size,
           color: commands.color,
@@ -97,12 +106,23 @@ export function Overlay(): React.JSX.Element {
     return () => {
       void unlisten.then((dispose) => dispose());
     };
-  }, [settings.defaultSize, customStamps]);
+  }, [settings.defaultSize, customStamps, externalEmotes]);
 
   useEffect(() => {
     void invoke<OverlaySettings>('get_overlay_settings').then(setSettings);
     const unlisten = listen<OverlaySettings>('overlay-settings-updated', ({ payload }) => {
       setSettings(payload);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
+    const applyExternalEmotes = (result: ExternalEmoteResult) => {
+      setExternalEmotes(new Map(result.emotes.map((emote) => [emote.name, emote.url])));
+    };
+    void invoke<ExternalEmoteResult>('get_external_emotes').then(applyExternalEmotes);
+    const unlisten = listen<ExternalEmoteResult>('external-emotes-updated', ({ payload }) => {
+      applyExternalEmotes(payload);
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
@@ -145,6 +165,8 @@ export function Overlay(): React.JSX.Element {
               <img key={fragment.key} src={fragment.url} alt={fragment.text} />
             ) : fragment.type === 'customStamp' ? (
               <img key={fragment.key} src={fragment.dataUri} alt={fragment.text} />
+            ) : fragment.type === 'externalEmote' ? (
+              <img key={fragment.key} src={fragment.url} alt={fragment.text} />
             ) : (
               <span key={fragment.key}>{fragment.text}</span>
             ),

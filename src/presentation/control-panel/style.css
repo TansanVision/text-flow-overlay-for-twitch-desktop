@@ -104,6 +104,10 @@ body.control-panel-page #root {
   font-size: 13px;
 }
 
+.provider-error {
+  color: #ffb36b;
+}
+
 .stamp-editor {
   display: grid;
   gap: 10px;

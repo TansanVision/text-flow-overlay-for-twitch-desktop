@@ -7,6 +7,7 @@ mod twitch_auth;
 mod twitch_chat;
 mod overlay_settings;
 mod custom_stamps;
+mod external_emotes;
 
 fn find_available_port() -> std::io::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -57,7 +58,8 @@ pub fn run() {
             custom_stamps::get_custom_stamps,
             custom_stamps::reload_custom_stamps,
             custom_stamps::get_custom_stamp_editor_data,
-            custom_stamps::save_custom_stamp_definitions
+            custom_stamps::save_custom_stamp_definitions,
+            external_emotes::get_external_emotes
         ])
         .setup(move |app| {
             if cfg!(debug_assertions) {

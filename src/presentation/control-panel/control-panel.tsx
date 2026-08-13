@@ -27,6 +27,10 @@ type CustomStamp = { commandName: string; dataUri: string };
 type StampDefinition = { commandName: string; fileName: string };
 type StampEditorData = { definitions: StampDefinition[]; imageFiles: string[] };
 type EditableStampDefinition = StampDefinition & { id: string };
+type ExternalEmoteResult = {
+  emotes: { name: string; url: string; provider: string }[];
+  providers: { provider: string; count: number; error?: string }[];
+};
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -45,6 +49,8 @@ export function ControlPanel(): React.JSX.Element {
   const [stampDefinitions, setStampDefinitions] = useState<EditableStampDefinition[]>([]);
   const [stampImageFiles, setStampImageFiles] = useState<string[]>([]);
   const [stampsSaved, setStampsSaved] = useState(false);
+  const [externalEmoteStatus, setExternalEmoteStatus] = useState<ExternalEmoteResult>();
+  const [isLoadingExternalEmotes, setIsLoadingExternalEmotes] = useState(false);
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
@@ -171,6 +177,26 @@ export function ControlPanel(): React.JSX.Element {
     }
   };
 
+  const loadExternalEmotes = async () => {
+    setIsLoadingExternalEmotes(true);
+    try {
+      const result = await invoke<ExternalEmoteResult>('get_external_emotes');
+      setExternalEmoteStatus(result);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setIsLoadingExternalEmotes(false);
+    }
+  };
+
+  useEffect(() => {
+    setIsLoadingExternalEmotes(true);
+    void invoke<ExternalEmoteResult>('get_external_emotes')
+      .then(setExternalEmoteStatus)
+      .catch((reason: unknown) => setError(String(reason)))
+      .finally(() => setIsLoadingExternalEmotes(false));
+  }, []);
+
   return (
     <main className="control-panel">
       <header>
@@ -206,6 +232,23 @@ export function ControlPanel(): React.JSX.Element {
           </div>
         )}
         {error && <p className="error">{error}</p>}
+      </section>
+
+      <section className="panel" aria-labelledby="external-emotes-title">
+        <h2 id="external-emotes-title">外部エモート</h2>
+        {externalEmoteStatus?.providers.map((status) => (
+          <p key={status.provider} className={status.error ? 'provider-error' : undefined}>
+            {status.provider}: {status.error ? `取得失敗 (${status.error})` : `${status.count}件`}
+          </p>
+        ))}
+        <p className="help-text">合計: {externalEmoteStatus?.emotes.length ?? 0}件</p>
+        <button
+          type="button"
+          onClick={() => void loadExternalEmotes()}
+          disabled={isLoadingExternalEmotes}
+        >
+          {isLoadingExternalEmotes ? '読み込み中…' : '外部エモートを再読み込み'}
+        </button>
       </section>
 
       <section className="panel" aria-labelledby="overlay-settings-title">
