@@ -13,9 +13,14 @@ const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscripti
 #[serde(rename_all = "camelCase")]
 struct ChatMessage {
     id: String,
-    user_name: String,
-    text: String,
-    color: String,
+    fragments: Vec<ChatFragment>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+enum ChatFragment {
+    Text { key: String, text: String },
+    Emote { key: String, text: String, url: String },
 }
 
 pub fn spawn(
@@ -117,15 +122,49 @@ async fn subscribe(
 
 fn emit_chat_message(app: &AppHandle, message: &Value) -> Result<(), String> {
     let event = &message["payload"]["event"];
+    let fragments = event["message"]["fragments"]
+        .as_array()
+        .map(|fragments| {
+            fragments
+                .iter()
+                .enumerate()
+                .map(|(index, fragment)| convert_fragment(fragment, index))
+                .collect()
+        })
+        .unwrap_or_else(|| {
+            vec![ChatFragment::Text {
+                key: "0".to_owned(),
+                text: event["message"]["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+            }]
+        });
     let chat = ChatMessage {
         id: event["message_id"].as_str().unwrap_or_default().to_owned(),
-        user_name: event["chatter_user_name"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
-        text: event["message"]["text"].as_str().unwrap_or_default().to_owned(),
-        color: event["color"].as_str().unwrap_or("#ffffff").to_owned(),
+        fragments,
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
         .map_err(|error| error.to_string())
+}
+
+fn convert_fragment(fragment: &Value, index: usize) -> ChatFragment {
+    let key = index.to_string();
+    let text = fragment["text"].as_str().unwrap_or_default().to_owned();
+    if fragment["type"].as_str() == Some("emote") {
+        if let Some(id) = fragment["emote"]["id"].as_str() {
+            let animated = fragment["emote"]["format"]
+                .as_array()
+                .is_some_and(|formats| formats.iter().any(|format| format == "animated"));
+            let format = if animated { "animated" } else { "static" };
+            return ChatFragment::Emote {
+                key,
+                text,
+                url: format!(
+                    "https://static-cdn.jtvnw.net/emoticons/v2/{id}/{format}/dark/3.0"
+                ),
+            };
+        }
+    }
+    ChatFragment::Text { key, text }
 }

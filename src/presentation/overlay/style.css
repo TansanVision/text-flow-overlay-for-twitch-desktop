@@ -9,26 +9,42 @@ body.overlay-page #root,
   background: transparent;
 }
 
-.chat-flow {
-  position: absolute;
-  left: 24px;
-  right: 24px;
-  bottom: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+@keyframes flow-left {
+  from {
+    transform: translateX(100vw);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
 }
 
 .chat-message {
+  position: absolute;
+  left: 0;
+  display: flex;
+  align-items: center;
+  width: max-content;
   margin: 0;
   color: #fff;
   font:
-    24px system-ui,
+    6vh system-ui,
     sans-serif;
   font-weight: 700;
-  text-shadow: 0 2px 5px #000;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  text-shadow:
+    2px 2px 0 #000,
+    -2px 2px 0 #000,
+    2px -2px 0 #000,
+    -2px -2px 0 #000;
+  animation: flow-left 5s linear forwards;
 }
 
-.chat-message strong {
-  margin-right: 10px;
+.chat-message img {
+  width: auto;
+  height: 1.2em;
+  object-fit: contain;
+  vertical-align: middle;
 }
