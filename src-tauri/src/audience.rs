@@ -7,15 +7,17 @@ use std::{
 
 use serde::Serialize;
 
+use crate::twitch_auth::TwitchAuthState;
+
 pub struct AudienceState {
-    path: PathBuf,
+    directory: PathBuf,
     entries: Mutex<BTreeMap<String, BTreeSet<String>>>,
 }
 
 impl AudienceState {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(directory: PathBuf) -> Self {
         Self {
-            path,
+            directory,
             entries: Mutex::new(BTreeMap::new()),
         }
     }
@@ -49,11 +51,21 @@ pub fn save(state: &AudienceState) -> Result<AudienceStatus, String> {
             ));
         }
     }
-    fs::write(&state.path, output)
+    fs::create_dir_all(&state.directory)
+        .map_err(|error| format!("反応ユーザー記録フォルダを作成できませんでした: {error}"))?;
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let base_name = format!("audience_{timestamp}");
+    let mut path = state.directory.join(format!("{base_name}.md"));
+    let mut sequence = 2;
+    while path.exists() {
+        path = state.directory.join(format!("{base_name}_{sequence}.md"));
+        sequence += 1;
+    }
+    fs::write(&path, output)
         .map_err(|error| format!("反応ユーザー一覧を保存できませんでした: {error}"))?;
     Ok(AudienceStatus {
         total: entries.values().map(BTreeSet::len).sum(),
-        path: state.path.display().to_string(),
+        path: path.display().to_string(),
     })
 }
 
@@ -61,11 +73,18 @@ pub fn save(state: &AudienceState) -> Result<AudienceStatus, String> {
 pub fn record_audience_interaction(
     kind: String,
     name: String,
+    user_id: Option<String>,
     state: tauri::State<'_, AudienceState>,
+    auth: tauri::State<'_, TwitchAuthState>,
 ) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
         return Ok(());
+    }
+    if let Some(user_id) = user_id.as_deref() {
+        if auth.is_current_user_id(user_id)? {
+            return Ok(());
+        }
     }
     state
         .entries
@@ -82,6 +101,24 @@ pub fn save_audience_interactions(
     state: tauri::State<'_, AudienceState>,
 ) -> Result<AudienceStatus, String> {
     save(&state)
+}
+
+#[tauri::command]
+pub fn open_audience_directory(state: tauri::State<'_, AudienceState>) -> Result<(), String> {
+    fs::create_dir_all(&state.directory)
+        .map_err(|error| format!("反応ユーザー記録フォルダを作成できませんでした: {error}"))?;
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg(&state.directory)
+            .spawn()
+            .map_err(|error| format!("反応ユーザー記録フォルダを開けませんでした: {error}"))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("反応ユーザー記録フォルダを開く操作は現在Windowsのみ対応しています".into())
+    }
 }
 
 #[tauri::command]

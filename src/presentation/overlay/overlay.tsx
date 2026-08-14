@@ -2,8 +2,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { Language } from '../i18n';
 import { BuiltInEffect } from './built-in-effect';
 import { type CommentSize, type EffectCommand, parseCommands } from './comment-command';
+import { shouldFilterComment, splitByBreaklineCommand, tokenizeKeywords } from './comment-pipeline';
+import { FallingStamps } from './falling-stamps';
 import { type Raid, RaidIntro } from './raid-intro';
 import './style.css';
 
@@ -25,21 +29,26 @@ type ExternalEmoteResult = { emotes: ExternalEmote[] };
 
 type ChatMessage = {
   id: string;
-  fragments: RenderFragment[];
+  lines: ChatLine[];
   lane: number;
   size: CommentSize;
   color?: string;
   alignment: string;
 };
+type ChatLine = { key: string; fragments: RenderFragment[] };
 type IncomingChatMessage = {
   id: string;
   fragments: ChatFragment[];
   authorName?: string;
+  authorUserId?: string;
   interactionType?: string;
 };
 type ActiveEffect = { id: string; type: EffectCommand };
+type ActiveFallingStamp = { id: string; dataUri: string };
 
 type OverlaySettings = {
+  language: Language;
+  settingsVersion: number;
   commentDurationSeconds: number;
   defaultSize: CommentSize;
   raidClipsEnabled: boolean;
@@ -47,16 +56,20 @@ type OverlaySettings = {
   raidClipMuted: boolean;
   raidIntroSeconds: number;
   raidAutoShoutout: boolean;
+  raidIntroductionMode: 'automatic' | 'manual';
   enabledEffects: EffectCommand[];
 };
 const defaultSettings: OverlaySettings = {
+  language: 'ja',
+  settingsVersion: 1,
   commentDurationSeconds: 5,
   defaultSize: 'medium',
   raidClipsEnabled: true,
-  raidClipCount: 1,
+  raidClipCount: 5,
   raidClipMuted: false,
-  raidIntroSeconds: 15,
-  raidAutoShoutout: false,
+  raidIntroSeconds: 60,
+  raidAutoShoutout: true,
+  raidIntroductionMode: 'automatic',
   enabledEffects: [
     'sakura',
     'snow',
@@ -89,46 +102,96 @@ function expandCustomStamps(
   fragments: ChatFragment[],
   stamps: Map<string, CustomStamp>,
   externalEmotes: Map<string, string>,
-): RenderFragment[] {
+): { fragments: RenderFragment[]; fallingStamps: ActiveFallingStamp[] } {
   const expanded: RenderFragment[] = [];
+  const fallingStamps: ActiveFallingStamp[] = [];
+  const keywords = new Set([...stamps.keys(), ...externalEmotes.keys()]);
   for (const fragment of fragments) {
     if (fragment.type === 'emote') {
       expanded.push(fragment);
       continue;
     }
-    for (const [index, text] of fragment.text.split(/(\s+)/).filter(Boolean).entries()) {
-      const stamp = stamps.get(text);
-      const externalUrl = externalEmotes.get(text);
+    for (const [index, token] of tokenizeKeywords(fragment.text, keywords).entries()) {
+      const stamp = token.keyword ? stamps.get(token.keyword) : undefined;
+      const externalUrl = token.keyword ? externalEmotes.get(token.keyword) : undefined;
+      if (stamp?.effectType === 'falling') {
+        fallingStamps.push({
+          id: `${fragment.key}-${index}-${crypto.randomUUID()}`,
+          dataUri: stamp.dataUri,
+        });
+        continue;
+      }
       expanded.push(
         stamp
           ? {
               type: 'customStamp',
               key: `${fragment.key}-${index}`,
-              text,
+              text: token.text,
               dataUri: stamp.dataUri,
               effectType: stamp.effectType,
             }
           : externalUrl
-            ? { type: 'externalEmote', key: `${fragment.key}-${index}`, text, url: externalUrl }
-            : { ...fragment, key: `${fragment.key}-${index}`, text },
+            ? {
+                type: 'externalEmote',
+                key: `${fragment.key}-${index}`,
+                text: token.text,
+                url: externalUrl,
+              }
+            : { ...fragment, key: `${fragment.key}-${index}`, text: token.text },
       );
     }
   }
-  return expanded;
+  return { fragments: expanded, fallingStamps };
+}
+
+function splitChatFragmentsIntoLines(fragments: ChatFragment[]): ChatFragment[][] {
+  const lines: ChatFragment[][] = [[]];
+  for (const fragment of fragments) {
+    if (fragment.type !== 'text') {
+      lines.at(-1)?.push(fragment);
+      continue;
+    }
+    const parts = splitByBreaklineCommand(fragment.text);
+    for (const [index, part] of parts.entries()) {
+      if (part) lines.at(-1)?.push({ ...fragment, key: `${fragment.key}-${index}`, text: part });
+      if (index < parts.length - 1) lines.push([]);
+    }
+  }
+  return lines.map(trimLineEdgeSpaces);
+}
+
+function trimLineEdgeSpaces(line: ChatFragment[]): ChatFragment[] {
+  const result = line.map((fragment) => ({ ...fragment }));
+  const first = result[0];
+  if (first?.type === 'text') first.text = first.text.replace(/^[ \t]+/, '');
+  const last = result.at(-1);
+  if (last?.type === 'text') last.text = last.text.replace(/[ \t]+$/, '');
+  return result.filter((fragment) => fragment.type !== 'text' || fragment.text !== '');
 }
 
 export function Overlay(): React.JSX.Element {
+  const { i18n } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
   const [customStamps, setCustomStamps] = useState<Map<string, CustomStamp>>(new Map());
   const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
   const [effects, setEffects] = useState<ActiveEffect[]>([]);
+  const [fallingStamps, setFallingStamps] = useState<ActiveFallingStamp[]>([]);
   const [raids, setRaids] = useState<Raid[]>([]);
+
+  useEffect(() => {
+    void i18n.changeLanguage(settings.language);
+    document.documentElement.lang = settings.language;
+  }, [i18n, settings.language]);
 
   useEffect(() => {
     const unlisten = listen<Raid>('twitch-raid', ({ payload }) => {
       setRaids((current) => [...current, payload]);
-      void invoke('record_audience_interaction', { kind: 'raid', name: payload.displayName });
+      void invoke('record_audience_interaction', {
+        kind: 'raid',
+        name: payload.displayName,
+        userId: payload.broadcasterUserId ?? null,
+      });
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
@@ -139,26 +202,38 @@ export function Overlay(): React.JSX.Element {
         void invoke('record_audience_interaction', {
           kind: payload.interactionType ?? 'comment',
           name: payload.authorName,
+          userId: payload.authorUserId,
         });
       }
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
+      if (shouldFilterComment(fullText)) return;
       const commands = parseCommands(fullText);
       const size = commands.size ?? settings.defaultSize;
       const effect = commands.effect;
       if (effect && settings.enabledEffects.includes(effect)) {
         setEffects((current) => [...current, { id: `${payload.id}-${effect}`, type: effect }]);
       }
-      const fragments = expandCustomStamps(
+      const sourceLines = splitChatFragmentsIntoLines(
         trimFragments(payload.fragments, commands.removeLength),
-        customStamps,
-        externalEmotes,
       );
-      if (fragments.every((fragment) => fragment.text.trim() === '')) return;
+      const expandedLines = sourceLines.map((line) =>
+        expandCustomStamps(line, customStamps, externalEmotes),
+      );
+      const newFallingStamps = expandedLines.flatMap((line) => line.fallingStamps);
+      if (newFallingStamps.length > 0) {
+        setFallingStamps((current) => [...current, ...newFallingStamps]);
+      }
+      const lines: ChatLine[] = expandedLines.map((line) => ({
+        key: crypto.randomUUID(),
+        fragments: line.fragments,
+      }));
+      if (lines.every((line) => line.fragments.every((fragment) => fragment.text.trim() === '')))
+        return;
       setMessages((current) => [
         ...current,
         {
           ...payload,
-          fragments,
+          lines,
           size,
           color: commands.color,
           alignment: commands.alignment,
@@ -210,6 +285,9 @@ export function Overlay(): React.JSX.Element {
   const removeRaid = useCallback((id: string) => {
     setRaids((current) => current.filter((raid) => raid.id !== id));
   }, []);
+  const removeFallingStamp = useCallback((id: string) => {
+    setFallingStamps((current) => current.filter((stamp) => stamp.id !== id));
+  }, []);
 
   return (
     <main className="overlay" aria-label="Twitch Text Flow Overlay">
@@ -222,6 +300,8 @@ export function Overlay(): React.JSX.Element {
           clipCount={settings.raidClipCount}
           clipMuted={settings.raidClipMuted}
           autoShoutout={settings.raidAutoShoutout}
+          introductionMode={settings.raidIntroductionMode}
+          language={settings.language}
           onComplete={removeRaid}
         />
       )}
@@ -231,6 +311,14 @@ export function Overlay(): React.JSX.Element {
           id={effect.id}
           type={effect.type}
           onComplete={removeEffect}
+        />
+      ))}
+      {fallingStamps.map((stamp) => (
+        <FallingStamps
+          key={stamp.id}
+          id={stamp.id}
+          src={stamp.dataUri}
+          onComplete={removeFallingStamp}
         />
       ))}
       {messages.map((message) => (
@@ -249,22 +337,23 @@ export function Overlay(): React.JSX.Element {
           }}
           onAnimationEnd={() => removeMessage(message.id)}
         >
-          {message.fragments.map((fragment) =>
-            fragment.type === 'emote' ? (
-              <img key={fragment.key} src={fragment.url} alt={fragment.text} />
-            ) : fragment.type === 'customStamp' ? (
-              <img
-                key={fragment.key}
-                src={fragment.dataUri}
-                alt={fragment.text}
-                data-stamp-effect={fragment.effectType}
-              />
-            ) : fragment.type === 'externalEmote' ? (
-              <img key={fragment.key} src={fragment.url} alt={fragment.text} />
-            ) : (
-              <span key={fragment.key}>{fragment.text}</span>
-            ),
-          )}
+          <span className="chat-lines">
+            {message.lines.map((line) => (
+              <span className="chat-line" key={line.key}>
+                {line.fragments.map((fragment) =>
+                  fragment.type === 'emote' ? (
+                    <img key={fragment.key} src={fragment.url} alt={fragment.text} />
+                  ) : fragment.type === 'customStamp' ? (
+                    <img key={fragment.key} src={fragment.dataUri} alt={fragment.text} />
+                  ) : fragment.type === 'externalEmote' ? (
+                    <img key={fragment.key} src={fragment.url} alt={fragment.text} />
+                  ) : (
+                    <span key={fragment.key}>{fragment.text}</span>
+                  ),
+                )}
+              </span>
+            ))}
+          </span>
         </p>
       ))}
     </main>

@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { Language } from '../i18n';
 
 export type Raid = {
   id: string;
@@ -27,6 +29,8 @@ type Props = {
   clipCount: number;
   clipMuted: boolean;
   autoShoutout: boolean;
+  introductionMode: 'automatic' | 'manual';
+  language: Language;
   onComplete: (id: string) => void;
 };
 
@@ -37,14 +41,20 @@ export function RaidIntro({
   clipCount,
   clipMuted,
   autoShoutout,
+  introductionMode,
+  language,
   onComplete,
 }: Props): React.JSX.Element | null {
+  const { t, i18n } = useTranslation();
   const [remaining, setRemaining] = useState(duration);
   const [clipIndex, setClipIndex] = useState<number>();
   const clips = useMemo(
     () => (clipsEnabled ? (raid.clips ?? []).slice(0, clipCount) : []),
     [clipCount, clipsEnabled, raid.clips],
   );
+  useEffect(() => {
+    void i18n.changeLanguage(language);
+  }, [i18n, language]);
   const finish = useCallback(() => {
     if (autoShoutout && raid.broadcasterUserId) {
       void invoke('send_twitch_shoutout', { raiderUserId: raid.broadcasterUserId }).catch(
@@ -53,21 +63,31 @@ export function RaidIntro({
     }
     onComplete(raid.id);
   }, [autoShoutout, onComplete, raid.broadcasterUserId, raid.id]);
+  const finishIntro = useCallback(() => {
+    if (introductionMode === 'manual') {
+      void invoke('notify_manual_raid_ready', { raid }).catch((error: unknown) =>
+        console.error(error),
+      );
+      onComplete(raid.id);
+      return;
+    }
+    if (clips.length > 0) setClipIndex(0);
+    else finish();
+  }, [clips.length, finish, introductionMode, onComplete, raid]);
   useEffect(() => {
     if (clipIndex !== undefined) return;
     const timer = window.setInterval(() => {
       setRemaining((current) => {
         if (current <= 1) {
           window.clearInterval(timer);
-          if (clips.length > 0) setClipIndex(0);
-          else finish();
+          finishIntro();
           return 0;
         }
         return current - 1;
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [clipIndex, clips.length, finish]);
+  }, [clipIndex, finishIntro]);
 
   useEffect(() => {
     if (clipIndex === undefined) return;
@@ -92,7 +112,7 @@ export function RaidIntro({
     return (
       <aside className="raid-clip-player">
         <header>
-          <strong>{raid.displayName}さんのクリップ</strong>
+          <strong>{t('clipHeading', { name: raid.displayName })}</strong>
           <span>{clip.title}</span>
         </header>
         <iframe
@@ -111,9 +131,10 @@ export function RaidIntro({
       {raid.profileImageUrl && <img src={raid.profileImageUrl} alt="" />}
       <div>
         <strong>{raid.displayName}</strong>
-        <p>Raidありがとうございます！</p>
+        <p>{t('raidThanks')}</p>
         <small>
-          {raid.viewerCount}人でRaid · {remaining}秒
+          {t('viewersRaid', { count: raid.viewerCount })} ·{' '}
+          {t('secondsRemaining', { count: remaining })}
         </small>
       </div>
     </aside>

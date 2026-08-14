@@ -30,7 +30,7 @@ body.overlay-page #root,
   position: absolute;
   left: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   width: max-content;
   margin: 0;
   color: #fff;
@@ -46,6 +46,34 @@ body.overlay-page #root,
     2px -2px 0 #000,
     -2px -2px 0 #000;
   animation: flow-left 5s linear forwards;
+}
+
+.chat-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  height: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-line {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  width: max-content;
+  min-height: 1em;
+  margin: 0;
+  padding: 0;
+  line-height: 1em;
+  white-space: pre;
+}
+
+.chat-line > span {
+  display: inline-block;
+  line-height: 1em;
 }
 
 .chat-message[data-size="small"] {
@@ -106,25 +134,37 @@ body.overlay-page #root,
 }
 
 .chat-message img {
+  display: block;
   width: auto;
   height: 1.2em;
   object-fit: contain;
   vertical-align: middle;
 }
 
-.chat-message img[data-stamp-effect="falling"] {
-  position: fixed;
-  top: -15vh;
-  left: var(--stamp-left, 50vw);
-  width: auto;
-  height: 12vh;
-  animation: stamp-fall 5s linear forwards;
+.chat-message[data-size="small"] img {
+  height: 1.1em;
 }
 
-@keyframes stamp-fall {
-  to {
-    transform: translate3d(8vw, 125vh, 0) rotate(540deg);
-  }
+.chat-message[data-size="big"] img {
+  height: 1.5em;
+}
+
+.falling-stamps {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.falling-stamps img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: contain;
+  opacity: 0;
+  user-select: none;
+  will-change: transform;
 }
 
 .built-in-effect {

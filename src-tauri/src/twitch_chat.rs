@@ -15,6 +15,7 @@ struct ChatMessage {
     id: String,
     fragments: Vec<ChatFragment>,
     author_name: Option<String>,
+    author_user_id: Option<String>,
     interaction_type: String,
 }
 
@@ -331,6 +332,7 @@ fn emit_chat_message(app: &AppHandle, message: &Value) -> Result<(), String> {
         id: event["message_id"].as_str().unwrap_or_default().to_owned(),
         fragments,
         author_name: event["chatter_user_name"].as_str().map(str::to_owned),
+        author_user_id: event["chatter_user_id"].as_str().map(str::to_owned),
         interaction_type: "comment".to_owned(),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
@@ -369,6 +371,7 @@ fn emit_support_message(app: &AppHandle, message: &Value, kind: &str) -> Result<
             text,
         }],
         author_name: Some(name.to_owned()),
+        author_user_id: event["user_id"].as_str().map(str::to_owned),
         interaction_type: kind.to_owned(),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)

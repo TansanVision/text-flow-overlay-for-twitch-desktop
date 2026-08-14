@@ -21,7 +21,28 @@ body.control-panel-page #root {
 }
 
 .control-panel header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
   margin-bottom: 28px;
+}
+
+.language-selector {
+  display: grid;
+  gap: 6px;
+  min-width: 9rem;
+  color: #c7c2cf;
+  font-size: 12px;
+}
+
+.language-selector select {
+  padding: 9px 10px;
+  border: 1px solid #484153;
+  border-radius: 8px;
+  color: inherit;
+  background: #111016;
+  font: inherit;
 }
 
 .control-panel h1,
@@ -168,6 +189,40 @@ body.control-panel-page #root {
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.manual-raid-panel {
+  border-color: rgba(177, 119, 255, 0.7);
+}
+
+.manual-raid-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.manual-raid-card img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.manual-raid-card div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.manual-raid-card small {
+  color: #bbb2c8;
 }
 
 .authorization {

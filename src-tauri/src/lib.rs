@@ -1,7 +1,7 @@
-use std::{fs, net::TcpListener, path::PathBuf};
+use std::{fs, net::TcpListener, path::PathBuf, sync::Mutex};
 
 use tauri::{webview::WebviewWindowBuilder, WebviewUrl};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, PhysicalPosition, Position};
 
 mod audience;
 mod custom_stamps;
@@ -9,6 +9,10 @@ mod external_emotes;
 mod overlay_settings;
 mod twitch_auth;
 mod twitch_chat;
+
+struct OverlayWindowPositionState {
+    previous_position: Mutex<Option<PhysicalPosition<i32>>>,
+}
 
 fn find_available_port() -> std::io::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -24,6 +28,7 @@ fn create_portable_data_directories() -> std::io::Result<PathBuf> {
     fs::create_dir_all(data_directory.join("auth"))?;
     fs::create_dir_all(data_directory.join("config"))?;
     fs::create_dir_all(data_directory.join("custom-stamps"))?;
+    fs::create_dir_all(data_directory.join("audience"))?;
     Ok(data_directory)
 }
 
@@ -47,9 +52,10 @@ pub fn run() {
         ))
         .manage(settings)
         .manage(custom_stamps)
-        .manage(audience::AudienceState::new(
-            data_directory.join("audience.md"),
-        ))
+        .manage(audience::AudienceState::new(data_directory.join("audience")))
+        .manage(OverlayWindowPositionState {
+            previous_position: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             twitch_auth::start_twitch_device_authorization,
             twitch_auth::poll_twitch_device_authorization,
@@ -61,11 +67,16 @@ pub fn run() {
             custom_stamps::get_custom_stamps,
             custom_stamps::reload_custom_stamps,
             custom_stamps::get_custom_stamp_editor_data,
+            custom_stamps::open_custom_stamp_directory,
             custom_stamps::save_custom_stamp_definitions,
             external_emotes::get_external_emotes,
             audience::record_audience_interaction,
             audience::save_audience_interactions,
+            audience::open_audience_directory,
             audience::clear_audience_interactions,
+            get_overlay_window_visibility,
+            set_overlay_window_visibility,
+            notify_manual_raid_ready,
             emit_overlay_test
         ])
         .setup(move |app| {
@@ -90,7 +101,11 @@ pub fn run() {
             let overlay = WebviewWindowBuilder::new(
                 app,
                 "overlay",
-                WebviewUrl::App("index.html?view=overlay".into()),
+                WebviewUrl::External(
+                    format!("http://localhost:{port}/index.html?view=overlay")
+                        .parse()
+                        .expect("failed to build the localhost overlay URL"),
+                ),
             )
             .title("Twitch Text Flow Overlay")
             .inner_size(1280.0, 720.0)
@@ -115,6 +130,60 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn notify_manual_raid_ready(app: tauri::AppHandle, raid: serde_json::Value) -> Result<(), String> {
+    app.emit_to("control-panel", "manual-raid-ready", raid)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_overlay_window_visibility(app: tauri::AppHandle) -> Result<bool, String> {
+    let position = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "オーバーレイウィンドウが見つかりません".to_owned())?
+        .outer_position()
+        .map_err(|error| error.to_string())?;
+    Ok(position.x > -5000 && position.y > -5000)
+}
+
+#[tauri::command]
+fn set_overlay_window_visibility(
+    app: tauri::AppHandle,
+    visible: bool,
+    state: tauri::State<'_, OverlayWindowPositionState>,
+) -> Result<bool, String> {
+    let overlay = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "オーバーレイウィンドウが見つかりません".to_owned())?;
+    if visible {
+        overlay.show().map_err(|error| error.to_string())?;
+        let position = state
+            .previous_position
+            .lock()
+            .map_err(|error| error.to_string())?
+            .take()
+            .unwrap_or_else(|| PhysicalPosition::new(0, 0));
+        overlay
+            .set_position(Position::Physical(position))
+            .map_err(|error| error.to_string())?;
+    } else {
+        let current_position = overlay
+            .outer_position()
+            .map_err(|error| error.to_string())?;
+        if current_position.x > -5000 && current_position.y > -5000 {
+            *state
+                .previous_position
+                .lock()
+                .map_err(|error| error.to_string())? = Some(current_position);
+        }
+        overlay.show().map_err(|error| error.to_string())?;
+        overlay
+            .set_position(Position::Physical(PhysicalPosition::new(-10_000, -10_000)))
+            .map_err(|error| error.to_string())?;
+    }
+    get_overlay_window_visibility(app)
 }
 
 #[tauri::command]

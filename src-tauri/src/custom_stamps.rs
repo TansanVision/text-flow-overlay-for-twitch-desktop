@@ -1,3 +1,6 @@
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 use std::{fs, path::PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -26,6 +29,7 @@ pub struct CustomStamp {
 pub struct CustomStampEditorData {
     definitions: Vec<StampDefinition>,
     image_files: Vec<String>,
+    directory_path: String,
 }
 
 pub struct CustomStampsState {
@@ -136,7 +140,35 @@ pub fn get_custom_stamp_editor_data(
     Ok(CustomStampEditorData {
         definitions: state.load_definitions()?,
         image_files: state.image_files()?,
+        directory_path: state.directory.display().to_string(),
     })
+}
+
+#[tauri::command]
+pub fn open_custom_stamp_directory(
+    state: tauri::State<'_, CustomStampsState>,
+) -> Result<(), String> {
+    let directory = state
+        .directory
+        .canonicalize()
+        .map_err(|error| format!("画像フォルダの場所を取得できませんでした: {error}"))?;
+
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("explorer.exe")
+            .arg(&directory)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|error| format!("画像フォルダを開けませんでした: {error}"))?;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = directory;
+        Err("画像フォルダを開く操作は現在Windowsのみ対応しています".into())
+    }
 }
 
 #[tauri::command]

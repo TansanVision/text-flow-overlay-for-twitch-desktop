@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import './i18n';
 import { ControlPanel } from './control-panel/control-panel';
 import { Overlay } from './overlay/overlay';
 
