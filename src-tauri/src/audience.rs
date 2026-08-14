@@ -73,7 +73,7 @@ pub fn save(state: &AudienceState) -> Result<AudienceStatus, String> {
 pub fn record_audience_interaction(
     kind: String,
     name: String,
-    user_id: Option<String>,
+    user_id: String,
     state: tauri::State<'_, AudienceState>,
     auth: tauri::State<'_, TwitchAuthState>,
 ) -> Result<(), String> {
@@ -81,10 +81,8 @@ pub fn record_audience_interaction(
     if name.is_empty() {
         return Ok(());
     }
-    if let Some(user_id) = user_id.as_deref() {
-        if auth.is_current_user_id(user_id)? {
-            return Ok(());
-        }
+    if !user_id.is_empty() && auth.is_current_user_id(&user_id)? {
+        return Ok(());
     }
     state
         .entries

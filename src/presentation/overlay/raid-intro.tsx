@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Language } from '../i18n';
 
@@ -34,6 +34,8 @@ type Props = {
   onComplete: (id: string) => void;
 };
 
+type RaidPhase = 'intro' | 'clips' | 'shoutout' | 'completed';
+
 export function RaidIntro({
   raid,
   duration,
@@ -47,7 +49,10 @@ export function RaidIntro({
 }: Props): React.JSX.Element | null {
   const { t, i18n } = useTranslation();
   const [remaining, setRemaining] = useState(duration);
-  const [clipIndex, setClipIndex] = useState<number>();
+  const [phase, setPhase] = useState<RaidPhase>('intro');
+  const [clipIndex, setClipIndex] = useState(0);
+  const introCompleted = useRef(false);
+  const shoutoutStarted = useRef(false);
   const clips = useMemo(
     () => (clipsEnabled ? (raid.clips ?? []).slice(0, clipCount) : []),
     [clipCount, clipsEnabled, raid.clips],
@@ -55,15 +60,9 @@ export function RaidIntro({
   useEffect(() => {
     void i18n.changeLanguage(language);
   }, [i18n, language]);
-  const finish = useCallback(() => {
-    if (autoShoutout && raid.broadcasterUserId) {
-      void invoke('send_twitch_shoutout', { raiderUserId: raid.broadcasterUserId }).catch(
-        (error: unknown) => console.error(error),
-      );
-    }
-    onComplete(raid.id);
-  }, [autoShoutout, onComplete, raid.broadcasterUserId, raid.id]);
   const finishIntro = useCallback(() => {
+    if (introCompleted.current) return;
+    introCompleted.current = true;
     if (introductionMode === 'manual') {
       void invoke('notify_manual_raid_ready', { raid }).catch((error: unknown) =>
         console.error(error),
@@ -71,39 +70,58 @@ export function RaidIntro({
       onComplete(raid.id);
       return;
     }
-    if (clips.length > 0) setClipIndex(0);
-    else finish();
-  }, [clips.length, finish, introductionMode, onComplete, raid]);
-  useEffect(() => {
-    if (clipIndex !== undefined) return;
-    const timer = window.setInterval(() => {
-      setRemaining((current) => {
-        if (current <= 1) {
-          window.clearInterval(timer);
-          finishIntro();
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [clipIndex, finishIntro]);
+    setPhase(clips.length > 0 ? 'clips' : 'shoutout');
+  }, [clips.length, introductionMode, onComplete, raid]);
 
   useEffect(() => {
-    if (clipIndex === undefined) return;
-    const clip = clips[clipIndex];
-    if (!clip) {
-      finish();
+    if (phase !== 'intro') return;
+    if (remaining <= 0) {
+      finishIntro();
       return;
     }
     const timer = window.setTimeout(
-      () => setClipIndex((current) => (current ?? 0) + 1),
+      () => setRemaining((current) => Math.max(current - 1, 0)),
+      1000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [finishIntro, phase, remaining]);
+
+  useEffect(() => {
+    if (phase !== 'clips') return;
+    const clip = clips[clipIndex];
+    if (!clip) {
+      setPhase('shoutout');
+      return;
+    }
+    const timer = window.setTimeout(
+      () => {
+        if (clipIndex + 1 < clips.length) setClipIndex((current) => current + 1);
+        else setPhase('shoutout');
+      },
       Math.max(clip.duration || 30, 1) * 1000,
     );
     return () => window.clearTimeout(timer);
-  }, [clipIndex, clips, finish]);
+  }, [clipIndex, clips, phase]);
 
-  if (clipIndex !== undefined) {
+  useEffect(() => {
+    if (phase !== 'shoutout' || shoutoutStarted.current) return;
+    shoutoutStarted.current = true;
+    const sendShoutoutAndComplete = async () => {
+      try {
+        if (autoShoutout && raid.broadcasterUserId) {
+          await invoke('send_twitch_shoutout', { raiderUserId: raid.broadcasterUserId });
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setPhase('completed');
+        onComplete(raid.id);
+      }
+    };
+    void sendShoutoutAndComplete();
+  }, [autoShoutout, onComplete, phase, raid.broadcasterUserId, raid.id]);
+
+  if (phase === 'clips') {
     const clip = clips[clipIndex];
     if (!clip) return null;
     const separator = clip.embedUrl.includes('?') ? '&' : '?';
@@ -125,6 +143,8 @@ export function RaidIntro({
       </aside>
     );
   }
+
+  if (phase !== 'intro') return null;
 
   return (
     <aside className="raid-intro">

@@ -190,7 +190,7 @@ export function Overlay(): React.JSX.Element {
       void invoke('record_audience_interaction', {
         kind: 'raid',
         name: payload.displayName,
-        userId: payload.broadcasterUserId ?? null,
+        userId: payload.broadcasterUserId ?? '',
       });
     });
     return () => void unlisten.then((dispose) => dispose());
@@ -202,8 +202,8 @@ export function Overlay(): React.JSX.Element {
         void invoke('record_audience_interaction', {
           kind: payload.interactionType ?? 'comment',
           name: payload.authorName,
-          userId: payload.authorUserId,
-        });
+          userId: payload.authorUserId ?? '',
+        }).catch((error: unknown) => console.error('Failed to record audience interaction', error));
       }
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
       if (shouldFilterComment(fullText)) return;

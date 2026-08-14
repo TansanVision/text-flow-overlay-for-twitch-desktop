@@ -6,7 +6,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::twitch_chat;
 
@@ -410,40 +410,52 @@ pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), Str
 
 #[tauri::command]
 pub async fn send_twitch_shoutout(
+    app: AppHandle,
     raider_user_id: String,
     state: tauri::State<'_, TwitchAuthState>,
 ) -> Result<(), String> {
-    let access_token = state
-        .access_token
-        .lock()
-        .map_err(|error| error.to_string())?
-        .clone()
-        .ok_or_else(|| "Twitchに接続されていません".to_owned())?;
-    let broadcaster_id = state
-        .user_id
-        .lock()
-        .map_err(|error| error.to_string())?
-        .clone()
-        .ok_or_else(|| "TwitchユーザーIDがありません".to_owned())?;
-    let response = reqwest::Client::new()
-        .post("https://api.twitch.tv/helix/chat/shoutouts")
-        .query(&[
-            ("from_broadcaster_id", broadcaster_id.as_str()),
-            ("to_broadcaster_id", raider_user_id.as_str()),
-            ("moderator_id", broadcaster_id.as_str()),
-        ])
-        .bearer_auth(access_token)
-        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
-        .send()
-        .await
-        .map_err(|error| format!("シャウトアウトに失敗しました: {error}"))?;
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        Err(format!("シャウトアウトに失敗しました ({status}): {body}"))
+    let result = async {
+        let access_token = state
+            .access_token
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clone()
+            .ok_or_else(|| "Twitchに接続されていません".to_owned())?;
+        let broadcaster_id = state
+            .user_id
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clone()
+            .ok_or_else(|| "TwitchユーザーIDがありません".to_owned())?;
+        let response = reqwest::Client::new()
+            .post("https://api.twitch.tv/helix/chat/shoutouts")
+            .query(&[
+                ("from_broadcaster_id", broadcaster_id.as_str()),
+                ("to_broadcaster_id", raider_user_id.as_str()),
+                ("moderator_id", broadcaster_id.as_str()),
+            ])
+            .bearer_auth(access_token)
+            .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+            .send()
+            .await
+            .map_err(|error| format!("シャウトアウトに失敗しました: {error}"))?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            Err(format!("シャウトアウトに失敗しました ({status}): {body}"))
+        }
     }
+    .await;
+    let payload = match &result {
+        Ok(()) => serde_json::json!({ "success": true }),
+        Err(error) => serde_json::json!({ "success": false, "error": error }),
+    };
+    if let Err(error) = app.emit_to("control-panel", "shoutout-result", payload) {
+        log::warn!("Failed to emit shoutout result: {error}");
+    }
+    result
 }
 
 fn start_chat(

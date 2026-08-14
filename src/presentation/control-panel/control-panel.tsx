@@ -72,6 +72,7 @@ type ManualRaid = {
   viewerCount: number;
   profileImageUrl?: string;
 };
+type ShoutoutResult = { success: boolean; error?: string };
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -119,6 +120,7 @@ export function ControlPanel(): React.JSX.Element {
   const [overlayWindowVisible, setOverlayWindowVisible] = useState(true);
   const [manualRaids, setManualRaids] = useState<ManualRaid[]>([]);
   const [shoutoutInProgress, setShoutoutInProgress] = useState<string>();
+  const [shoutoutResult, setShoutoutResult] = useState<ShoutoutResult>();
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
@@ -148,6 +150,13 @@ export function ControlPanel(): React.JSX.Element {
       setManualRaids((current) =>
         current.some((raid) => raid.id === payload.id) ? current : [...current, payload],
       );
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<ShoutoutResult>('shoutout-result', ({ payload }) => {
+      setShoutoutResult(payload);
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
@@ -657,6 +666,13 @@ export function ControlPanel(): React.JSX.Element {
           {t('saveRaid')}
         </button>
         {settingsSaved && <span className="saved-message">{t('saved')}</span>}
+        {shoutoutResult && (
+          <p className={shoutoutResult.success ? 'success' : 'error'} role="status">
+            {shoutoutResult.success
+              ? t('shoutoutSucceeded')
+              : t('shoutoutFailed', { error: shoutoutResult.error ?? t('unknownError') })}
+          </p>
+        )}
       </section>
 
       {manualRaids.length > 0 && (
