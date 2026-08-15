@@ -34,7 +34,7 @@ type Props = {
   onComplete: (id: string) => void;
 };
 
-type RaidPhase = 'intro' | 'clips' | 'shoutout' | 'completed';
+type RaidPhase = 'intro' | 'clips' | 'manual-notify' | 'shoutout' | 'completed';
 
 export function RaidIntro({
   raid,
@@ -52,7 +52,9 @@ export function RaidIntro({
   const [phase, setPhase] = useState<RaidPhase>('intro');
   const [clipIndex, setClipIndex] = useState(0);
   const introCompleted = useRef(false);
+  const manualNotificationStarted = useRef(false);
   const shoutoutStarted = useRef(false);
+  const [manualNotificationAttempt, setManualNotificationAttempt] = useState(0);
   const clips = useMemo(
     () => (clipsEnabled ? (raid.clips ?? []).slice(0, clipCount) : []),
     [clipCount, clipsEnabled, raid.clips],
@@ -60,18 +62,40 @@ export function RaidIntro({
   useEffect(() => {
     void i18n.changeLanguage(language);
   }, [i18n, language]);
+  useEffect(() => {
+    void invoke('notify_raid_phase', { raidId: raid.id, phase }).catch((error: unknown) =>
+      console.error('Failed to report the Raid phase', error),
+    );
+  }, [phase, raid.id]);
   const finishIntro = useCallback(() => {
     if (introCompleted.current) return;
     introCompleted.current = true;
     if (introductionMode === 'manual') {
-      void invoke('notify_manual_raid_ready', { raid }).catch((error: unknown) =>
-        console.error(error),
-      );
-      onComplete(raid.id);
+      setPhase('manual-notify');
       return;
     }
     setPhase(clips.length > 0 ? 'clips' : 'shoutout');
-  }, [clips.length, introductionMode, onComplete, raid]);
+  }, [clips.length, introductionMode]);
+
+  useEffect(() => {
+    if (phase !== 'manual-notify' || manualNotificationStarted.current) return;
+    manualNotificationStarted.current = true;
+    void invoke('notify_manual_raid_ready', { raid })
+      .then(() => {
+        setPhase('completed');
+        onComplete(raid.id);
+      })
+      .catch((error: unknown) => {
+        console.error(
+          `Failed to notify the control panel about a manual Raid (attempt ${manualNotificationAttempt + 1})`,
+          error,
+        );
+        window.setTimeout(() => {
+          manualNotificationStarted.current = false;
+          setManualNotificationAttempt((current) => current + 1);
+        }, 2000);
+      });
+  }, [manualNotificationAttempt, onComplete, phase, raid]);
 
   useEffect(() => {
     if (phase !== 'intro') return;
@@ -108,8 +132,15 @@ export function RaidIntro({
     shoutoutStarted.current = true;
     const sendShoutoutAndComplete = async () => {
       try {
-        if (autoShoutout && raid.broadcasterUserId) {
-          await invoke('send_twitch_shoutout', { raiderUserId: raid.broadcasterUserId });
+        if (autoShoutout) {
+          await invoke('send_twitch_shoutout', {
+            raiderUserId: raid.broadcasterUserId ?? '',
+          });
+        } else {
+          await invoke('notify_raid_phase', {
+            raidId: raid.id,
+            phase: 'shoutout-disabled',
+          });
         }
       } catch (error) {
         console.error(error);
@@ -144,7 +175,7 @@ export function RaidIntro({
     );
   }
 
-  if (phase !== 'intro') return null;
+  if (phase !== 'intro' && phase !== 'manual-notify') return null;
 
   return (
     <aside className="raid-intro">

@@ -408,6 +408,7 @@ pub async fn send_twitch_shoutout(
     state: tauri::State<'_, TwitchAuthState>,
 ) -> Result<(), String> {
     let result = async {
+        validate_shoutout_target(&raider_user_id)?;
         let access_token = state
             .access_token
             .lock()
@@ -449,6 +450,14 @@ pub async fn send_twitch_shoutout(
         log::warn!("Failed to emit shoutout result: {error}");
     }
     result
+}
+
+fn validate_shoutout_target(raider_user_id: &str) -> Result<(), String> {
+    if raider_user_id.trim().is_empty() {
+        Err("シャウトアウト先のTwitchユーザーIDがありません".to_owned())
+    } else {
+        Ok(())
+    }
 }
 
 fn start_chat(
@@ -684,5 +693,14 @@ mod tests {
             expires_in: 3600,
         };
         assert!(has_required_scopes(&validated));
+    }
+
+    #[test]
+    fn rejects_an_empty_shoutout_target() {
+        assert_eq!(
+            validate_shoutout_target("  ").unwrap_err(),
+            "シャウトアウト先のTwitchユーザーIDがありません"
+        );
+        assert!(validate_shoutout_target("123456").is_ok());
     }
 }

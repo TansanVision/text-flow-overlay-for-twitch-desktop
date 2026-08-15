@@ -73,6 +73,7 @@ type ManualRaid = {
   profileImageUrl?: string;
 };
 type ShoutoutResult = { success: boolean; error?: string };
+type RaidPhaseStatus = { raidId: string; phase: string };
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -121,6 +122,7 @@ export function ControlPanel(): React.JSX.Element {
   const [manualRaids, setManualRaids] = useState<ManualRaid[]>([]);
   const [shoutoutInProgress, setShoutoutInProgress] = useState<string>();
   const [shoutoutResult, setShoutoutResult] = useState<ShoutoutResult>();
+  const [raidPhaseStatus, setRaidPhaseStatus] = useState<RaidPhaseStatus>();
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
@@ -157,6 +159,13 @@ export function ControlPanel(): React.JSX.Element {
   useEffect(() => {
     const unlisten = listen<ShoutoutResult>('shoutout-result', ({ payload }) => {
       setShoutoutResult(payload);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<RaidPhaseStatus>('raid-phase-updated', ({ payload }) => {
+      setRaidPhaseStatus(payload);
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
@@ -303,6 +312,44 @@ export function ControlPanel(): React.JSX.Element {
       setSettingsSaved(true);
       window.setTimeout(() => setSettingsSaved(false), 2000);
     } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
+  const changeRaidIntroductionMode = async (mode: 'automatic' | 'manual') => {
+    const previousMode = overlaySettings.raidIntroductionMode;
+    const settings = { ...overlaySettings, raidIntroductionMode: mode };
+    setOverlaySettings(settings);
+    try {
+      await invoke('save_overlay_settings', { settings });
+      setSettingsSaved(true);
+      setError(undefined);
+      window.setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (reason) {
+      setOverlaySettings((current) =>
+        current.raidIntroductionMode === mode
+          ? { ...current, raidIntroductionMode: previousMode }
+          : current,
+      );
+      setError(String(reason));
+    }
+  };
+
+  const changeRaidAutoShoutout = async (enabled: boolean) => {
+    const previousValue = overlaySettings.raidAutoShoutout;
+    const settings = { ...overlaySettings, raidAutoShoutout: enabled };
+    setOverlaySettings(settings);
+    try {
+      await invoke('save_overlay_settings', { settings });
+      setSettingsSaved(true);
+      setError(undefined);
+      window.setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (reason) {
+      setOverlaySettings((current) =>
+        current.raidAutoShoutout === enabled
+          ? { ...current, raidAutoShoutout: previousValue }
+          : current,
+      );
       setError(String(reason));
     }
   };
@@ -576,10 +623,7 @@ export function ControlPanel(): React.JSX.Element {
             id="raid-introduction-mode"
             value={overlaySettings.raidIntroductionMode}
             onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                raidIntroductionMode: event.target.value as 'automatic' | 'manual',
-              }))
+              void changeRaidIntroductionMode(event.target.value as 'automatic' | 'manual')
             }
           >
             <option value="automatic">{t('automatic')}</option>
@@ -649,12 +693,7 @@ export function ControlPanel(): React.JSX.Element {
                 id="raid-auto-shoutout"
                 type="checkbox"
                 checked={overlaySettings.raidAutoShoutout}
-                onChange={(event) =>
-                  setOverlaySettings((current) => ({
-                    ...current,
-                    raidAutoShoutout: event.target.checked,
-                  }))
-                }
+                onChange={(event) => void changeRaidAutoShoutout(event.target.checked)}
               />
             </>
           )}
@@ -666,6 +705,11 @@ export function ControlPanel(): React.JSX.Element {
           {t('saveRaid')}
         </button>
         {settingsSaved && <span className="saved-message">{t('saved')}</span>}
+        {raidPhaseStatus && (
+          <p className="help-text" role="status">
+            {t('raidPhase', { phase: raidPhaseStatus.phase })}
+          </p>
+        )}
         {shoutoutResult && (
           <p className={shoutoutResult.success ? 'success' : 'error'} role="status">
             {shoutoutResult.success

@@ -78,6 +78,7 @@ pub fn run() {
             get_overlay_window_visibility,
             set_overlay_window_visibility,
             notify_manual_raid_ready,
+            notify_raid_phase,
             emit_overlay_test
         ])
         .setup(move |app| {
@@ -137,6 +138,16 @@ pub fn run() {
 fn notify_manual_raid_ready(app: tauri::AppHandle, raid: serde_json::Value) -> Result<(), String> {
     app.emit_to("control-panel", "manual-raid-ready", raid)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn notify_raid_phase(app: tauri::AppHandle, raid_id: String, phase: String) -> Result<(), String> {
+    app.emit_to(
+        "control-panel",
+        "raid-phase-updated",
+        serde_json::json!({ "raidId": raid_id, "phase": phase }),
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
