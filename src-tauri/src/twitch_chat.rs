@@ -9,6 +9,10 @@ use tokio_tungstenite::connect_async;
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
+fn is_custom_stamp_help_command(text: Option<&str>) -> bool {
+    text.is_some_and(|value| value.trim().eq_ignore_ascii_case("!helpcs"))
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatMessage {
@@ -353,14 +357,39 @@ fn emit_chat_message(
             )?;
         }
     }
+    let message_id = event["message_id"].as_str().unwrap_or_default();
+    if is_custom_stamp_help_command(event["message"]["text"].as_str()) {
+        return app
+            .emit_to(
+                "overlay",
+                "custom-stamp-help-requested",
+                serde_json::json!({ "id": message_id }),
+            )
+            .map_err(|error| error.to_string());
+    }
     let chat = ChatMessage {
-        id: event["message_id"].as_str().unwrap_or_default().to_owned(),
+        id: message_id.to_owned(),
         fragments,
         author_name: author_name.map(str::to_owned),
         interaction_type: "comment".to_owned(),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_custom_stamp_help_command;
+
+    #[test]
+    fn recognizes_only_the_custom_stamp_help_command() {
+        assert!(is_custom_stamp_help_command(Some("!helpcs")));
+        assert!(is_custom_stamp_help_command(Some("  !HELPCS  ")));
+        assert!(!is_custom_stamp_help_command(Some("help")));
+        assert!(!is_custom_stamp_help_command(Some("!help")));
+        assert!(!is_custom_stamp_help_command(Some("please !helpcs")));
+        assert!(!is_custom_stamp_help_command(None));
+    }
 }
 
 fn emit_support_message(

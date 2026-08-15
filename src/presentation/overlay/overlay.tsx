@@ -51,6 +51,7 @@ type IncomingChatMessage = {
 type ActiveEffect = { id: string; type: EffectCommand };
 type ActiveFallingStamp = { id: string; dataUri: string };
 type HelpRequest = { id: string; stamps: HelpStamp[] };
+type HelpRequestEvent = { id: string };
 
 type OverlaySettings = {
   language: Language;
@@ -186,6 +187,22 @@ export function Overlay(): React.JSX.Element {
   const [raids, setRaids] = useState<Raid[]>([]);
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
 
+  const queueCustomStampHelp = useCallback((id: string) => {
+    void invoke<CustomStamp[]>('get_custom_stamps')
+      .then((latestStamps) => {
+        const stamps = latestStamps.map(({ commandName, dataUri }) => ({
+          commandName,
+          dataUri,
+        }));
+        if (stamps.length > 0) {
+          setHelpRequests((current) => [...current, { id, stamps }]);
+        } else {
+          console.warn('No custom stamps are registered for !helpcs');
+        }
+      })
+      .catch((error: unknown) => console.error('Failed to load !helpcs stamps', error));
+  }, []);
+
   useEffect(() => {
     void i18n.changeLanguage(settings.language);
     document.documentElement.lang = settings.language;
@@ -199,16 +216,17 @@ export function Overlay(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const unlisten = listen<HelpRequestEvent>('custom-stamp-help-requested', ({ payload }) => {
+      queueCustomStampHelp(payload.id);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, [queueCustomStampHelp]);
+
+  useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
       if (isCustomStampHelpCommand(fullText)) {
-        const stamps = [...customStamps.values()].map(({ commandName, dataUri }) => ({
-          commandName,
-          dataUri,
-        }));
-        if (stamps.length > 0) {
-          setHelpRequests((current) => [...current, { id: payload.id, stamps }]);
-        }
+        queueCustomStampHelp(payload.id);
         return;
       }
       if (shouldFilterComment(fullText)) return;
@@ -249,7 +267,13 @@ export function Overlay(): React.JSX.Element {
     return () => {
       void unlisten.then((dispose) => dispose());
     };
-  }, [settings.defaultSize, settings.enabledEffects, customStamps, externalEmotes]);
+  }, [
+    settings.defaultSize,
+    settings.enabledEffects,
+    customStamps,
+    externalEmotes,
+    queueCustomStampHelp,
+  ]);
 
   useEffect(() => {
     void invoke<OverlaySettings>('get_overlay_settings').then(setSettings);
