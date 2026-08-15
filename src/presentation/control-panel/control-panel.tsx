@@ -926,6 +926,13 @@ export function ControlPanel(): React.JSX.Element {
           </button>
         </div>
         <div className="effect-buttons">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void sendTestComment('!helpcs')}
+          >
+            {t('showStampHelp')}
+          </button>
           {['sakura', 'snow', 'balloons', 'kamifubuki', 'rain', 'maruta', 'chikuwa', 'marutai'].map(
             (effect) => (
               <button

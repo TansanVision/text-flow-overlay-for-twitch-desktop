@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-audience-interactions"
+description = "Enables the save_audience_interactions command without any pre-configured scope."
+commands.allow = ["save_audience_interactions"]
+
+[[permission]]
+identifier = "deny-save-audience-interactions"
+description = "Denies the save_audience_interactions command without any pre-configured scope."
+commands.deny = ["save_audience_interactions"]

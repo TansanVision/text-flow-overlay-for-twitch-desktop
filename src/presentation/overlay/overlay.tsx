@@ -51,7 +51,6 @@ type IncomingChatMessage = {
 type ActiveEffect = { id: string; type: EffectCommand };
 type ActiveFallingStamp = { id: string; dataUri: string };
 type HelpRequest = { id: string; stamps: HelpStamp[] };
-type HelpRequestEvent = { id: string };
 
 type OverlaySettings = {
   language: Language;
@@ -177,31 +176,40 @@ function trimLineEdgeSpaces(line: ChatFragment[]): ChatFragment[] {
 }
 
 export function Overlay(): React.JSX.Element {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
   const [customStamps, setCustomStamps] = useState<Map<string, CustomStamp>>(new Map());
+  const [customStampsLoadError, setCustomStampsLoadError] = useState<string>();
   const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
   const [effects, setEffects] = useState<ActiveEffect[]>([]);
   const [fallingStamps, setFallingStamps] = useState<ActiveFallingStamp[]>([]);
   const [raids, setRaids] = useState<Raid[]>([]);
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
 
-  const queueCustomStampHelp = useCallback((id: string) => {
-    void invoke<CustomStamp[]>('get_custom_stamps')
-      .then((latestStamps) => {
-        const stamps = latestStamps.map(({ commandName, dataUri }) => ({
-          commandName,
-          dataUri,
-        }));
-        if (stamps.length > 0) {
-          setHelpRequests((current) => [...current, { id, stamps }]);
-        } else {
-          console.warn('No custom stamps are registered for !helpcs');
-        }
-      })
-      .catch((error: unknown) => console.error('Failed to load !helpcs stamps', error));
-  }, []);
+  const queueCustomStampHelp = useCallback(
+    (id: string) => {
+      const stamps = [...customStamps.values()].map(({ commandName, dataUri }) => ({
+        commandName,
+        dataUri,
+      }));
+      const items = customStampsLoadError
+        ? [
+            {
+              commandName: t('customStampsLoadFailed', { error: customStampsLoadError }),
+            },
+          ]
+        : stamps.length > 0
+          ? stamps
+          : [{ commandName: t('noCustomStampsRegistered') }];
+      setHelpRequests((current) =>
+        current.some((request) => request.id === id)
+          ? current
+          : [...current, { id, stamps: items }],
+      );
+    },
+    [customStamps, customStampsLoadError, t],
+  );
 
   useEffect(() => {
     void i18n.changeLanguage(settings.language);
@@ -214,13 +222,6 @@ export function Overlay(): React.JSX.Element {
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
-
-  useEffect(() => {
-    const unlisten = listen<HelpRequestEvent>('custom-stamp-help-requested', ({ payload }) => {
-      queueCustomStampHelp(payload.id);
-    });
-    return () => void unlisten.then((dispose) => dispose());
-  }, [queueCustomStampHelp]);
 
   useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
@@ -297,8 +298,14 @@ export function Overlay(): React.JSX.Element {
   useEffect(() => {
     const applyStamps = (stamps: CustomStamp[]) => {
       setCustomStamps(new Map(stamps.map((stamp) => [stamp.commandName, stamp])));
+      setCustomStampsLoadError(undefined);
     };
-    void invoke<CustomStamp[]>('get_custom_stamps').then(applyStamps);
+    void invoke<CustomStamp[]>('get_custom_stamps')
+      .then(applyStamps)
+      .catch((error: unknown) => {
+        console.error('Failed to load custom stamps', error);
+        setCustomStampsLoadError(String(error));
+      });
     const unlisten = listen<CustomStamp[]>('custom-stamps-updated', ({ payload }) => {
       applyStamps(payload);
     });

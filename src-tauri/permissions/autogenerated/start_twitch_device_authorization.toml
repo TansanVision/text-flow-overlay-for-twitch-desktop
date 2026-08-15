@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-twitch-device-authorization"
+description = "Enables the start_twitch_device_authorization command without any pre-configured scope."
+commands.allow = ["start_twitch_device_authorization"]
+
+[[permission]]
+identifier = "deny-start-twitch-device-authorization"
+description = "Denies the start_twitch_device_authorization command without any pre-configured scope."
+commands.deny = ["start_twitch_device_authorization"]

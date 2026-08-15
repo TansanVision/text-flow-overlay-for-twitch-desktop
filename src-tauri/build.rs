@@ -1,3 +1,30 @@
 fn main() {
-    tauri_build::build()
+    tauri_build::try_build(
+        tauri_build::Attributes::new().app_manifest(
+            tauri_build::AppManifest::new().commands(&[
+                "start_twitch_device_authorization",
+                "poll_twitch_device_authorization",
+                "restore_twitch_authorization",
+                "logout_twitch",
+                "send_twitch_shoutout",
+                "get_overlay_settings",
+                "save_overlay_settings",
+                "get_custom_stamps",
+                "reload_custom_stamps",
+                "get_custom_stamp_editor_data",
+                "open_custom_stamp_directory",
+                "save_custom_stamp_definitions",
+                "get_external_emotes",
+                "save_audience_interactions",
+                "open_audience_directory",
+                "clear_audience_interactions",
+                "get_overlay_window_visibility",
+                "set_overlay_window_visibility",
+                "notify_manual_raid_ready",
+                "notify_raid_phase",
+                "emit_overlay_test",
+            ]),
+        ),
+    )
+    .expect("failed to run the Tauri build script")
 }

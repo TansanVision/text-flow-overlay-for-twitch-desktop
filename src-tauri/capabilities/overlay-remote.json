@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay-remote",
+  "description": "Allows the localhost overlay to read display data and report raid progress.",
+  "remote": {
+    "urls": ["http://localhost:*"]
+  },
+  "local": false,
+  "windows": ["overlay"],
+  "permissions": [
+    "core:event:allow-listen",
+    "allow-get-overlay-settings",
+    "allow-get-custom-stamps",
+    "allow-get-external-emotes",
+    "allow-notify-manual-raid-ready",
+    "allow-notify-raid-phase",
+    "allow-send-twitch-shoutout"
+  ]
+}

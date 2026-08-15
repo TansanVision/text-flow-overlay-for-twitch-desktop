@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poll-twitch-device-authorization"
+description = "Enables the poll_twitch_device_authorization command without any pre-configured scope."
+commands.allow = ["poll_twitch_device_authorization"]
+
+[[permission]]
+identifier = "deny-poll-twitch-device-authorization"
+description = "Denies the poll_twitch_device_authorization command without any pre-configured scope."
+commands.deny = ["poll_twitch_device_authorization"]

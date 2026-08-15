@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 export type HelpStamp = {
   commandName: string;
-  dataUri: string;
+  dataUri?: string;
 };
 
 type Props = {
@@ -41,7 +41,7 @@ export function CustomCommandHelp({
       key={`${id}-${index}`}
       style={{ animationDuration: `${Math.max(durationSeconds, 1)}s` }}
     >
-      <img src={stamp.dataUri} alt="" />
+      {stamp.dataUri && <img src={stamp.dataUri} alt="" />}
       <strong>{stamp.commandName}</strong>
     </aside>
   );

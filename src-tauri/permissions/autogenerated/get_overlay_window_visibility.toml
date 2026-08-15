@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-overlay-window-visibility"
+description = "Enables the get_overlay_window_visibility command without any pre-configured scope."
+commands.allow = ["get_overlay_window_visibility"]
+
+[[permission]]
+identifier = "deny-get-overlay-window-visibility"
+description = "Denies the get_overlay_window_visibility command without any pre-configured scope."
+commands.deny = ["get_overlay_window_visibility"]

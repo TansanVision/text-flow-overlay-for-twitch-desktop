@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-audience-interactions"
+description = "Enables the clear_audience_interactions command without any pre-configured scope."
+commands.allow = ["clear_audience_interactions"]
+
+[[permission]]
+identifier = "deny-clear-audience-interactions"
+description = "Denies the clear_audience_interactions command without any pre-configured scope."
+commands.deny = ["clear_audience_interactions"]

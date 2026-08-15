@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notify-manual-raid-ready"
+description = "Enables the notify_manual_raid_ready command without any pre-configured scope."
+commands.allow = ["notify_manual_raid_ready"]
+
+[[permission]]
+identifier = "deny-notify-manual-raid-ready"
+description = "Denies the notify_manual_raid_ready command without any pre-configured scope."
+commands.deny = ["notify_manual_raid_ready"]

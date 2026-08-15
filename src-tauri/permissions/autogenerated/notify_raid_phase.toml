@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notify-raid-phase"
+description = "Enables the notify_raid_phase command without any pre-configured scope."
+commands.allow = ["notify_raid_phase"]
+
+[[permission]]
+identifier = "deny-notify-raid-phase"
+description = "Denies the notify_raid_phase command without any pre-configured scope."
+commands.deny = ["notify_raid_phase"]

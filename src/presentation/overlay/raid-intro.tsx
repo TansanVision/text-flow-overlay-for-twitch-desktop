@@ -54,7 +54,6 @@ export function RaidIntro({
   const introCompleted = useRef(false);
   const manualNotificationStarted = useRef(false);
   const shoutoutStarted = useRef(false);
-  const [manualNotificationAttempt, setManualNotificationAttempt] = useState(0);
   const clips = useMemo(
     () => (clipsEnabled ? (raid.clips ?? []).slice(0, clipCount) : []),
     [clipCount, clipsEnabled, raid.clips],
@@ -80,22 +79,13 @@ export function RaidIntro({
   useEffect(() => {
     if (phase !== 'manual-notify' || manualNotificationStarted.current) return;
     manualNotificationStarted.current = true;
-    void invoke('notify_manual_raid_ready', { raid })
-      .then(() => {
-        setPhase('completed');
-        onComplete(raid.id);
-      })
-      .catch((error: unknown) => {
-        console.error(
-          `Failed to notify the control panel about a manual Raid (attempt ${manualNotificationAttempt + 1})`,
-          error,
-        );
-        window.setTimeout(() => {
-          manualNotificationStarted.current = false;
-          setManualNotificationAttempt((current) => current + 1);
-        }, 2000);
-      });
-  }, [manualNotificationAttempt, onComplete, phase, raid]);
+    const notification = invoke('notify_manual_raid_ready', { raid });
+    setPhase('completed');
+    onComplete(raid.id);
+    void notification.catch((error: unknown) =>
+      console.error('Failed to notify the control panel about a manual Raid', error),
+    );
+  }, [onComplete, phase, raid]);
 
   useEffect(() => {
     if (phase !== 'intro') return;

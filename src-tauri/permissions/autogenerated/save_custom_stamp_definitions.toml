@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-custom-stamp-definitions"
+description = "Enables the save_custom_stamp_definitions command without any pre-configured scope."
+commands.allow = ["save_custom_stamp_definitions"]
+
+[[permission]]
+identifier = "deny-save-custom-stamp-definitions"
+description = "Denies the save_custom_stamp_definitions command without any pre-configured scope."
+commands.deny = ["save_custom_stamp_definitions"]
