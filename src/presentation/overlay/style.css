@@ -272,6 +272,50 @@ body.overlay-page #root,
   color: #cfc5dc;
 }
 
+.custom-command-help {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 260px;
+  padding: 14px 20px;
+  border: 1px solid rgba(177, 119, 255, 0.65);
+  border-radius: 12px;
+  color: white;
+  background: rgba(18, 12, 28, 0.92);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, sans-serif;
+  animation-name: custom-command-help-lifetime;
+  animation-timing-function: ease-in-out;
+}
+
+.custom-command-help img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.custom-command-help strong {
+  font-size: 26px;
+  overflow-wrap: anywhere;
+}
+
+@keyframes custom-command-help-lifetime {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  10%,
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .raid-clip-player {
   position: absolute;
   top: 50%;

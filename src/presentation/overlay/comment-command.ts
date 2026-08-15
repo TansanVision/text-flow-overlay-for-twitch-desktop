@@ -80,6 +80,10 @@ export type ParsedCommands = {
   removeLength: number;
 };
 
+export function isCustomStampHelpCommand(text: string): boolean {
+  return /^!helpcs$/i.test(text.trim());
+}
+
 export function parseCommands(text: string): ParsedCommands {
   const matches = [...text.matchAll(/\S+/g)];
   const result: ParsedCommands = { alignment: 'flow', removeLength: 0 };

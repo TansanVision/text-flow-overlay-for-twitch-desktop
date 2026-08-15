@@ -7,8 +7,6 @@ use std::{
 
 use serde::Serialize;
 
-use crate::twitch_auth::TwitchAuthState;
-
 pub struct AudienceState {
     directory: PathBuf,
     entries: Mutex<BTreeMap<String, BTreeSet<String>>>,
@@ -69,26 +67,16 @@ pub fn save(state: &AudienceState) -> Result<AudienceStatus, String> {
     })
 }
 
-#[tauri::command]
-pub fn record_audience_interaction(
-    kind: String,
-    name: String,
-    user_id: String,
-    state: tauri::State<'_, AudienceState>,
-    auth: tauri::State<'_, TwitchAuthState>,
-) -> Result<(), String> {
+pub fn record(state: &AudienceState, kind: &str, name: &str) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
-        return Ok(());
-    }
-    if !user_id.is_empty() && auth.is_current_user_id(&user_id)? {
         return Ok(());
     }
     state
         .entries
         .lock()
         .map_err(|error| error.to_string())?
-        .entry(kind)
+        .entry(kind.to_owned())
         .or_default()
         .insert(name.to_owned());
     Ok(())
@@ -127,4 +115,41 @@ pub fn clear_audience_interactions(state: tauri::State<'_, AudienceState>) -> Re
         .map_err(|error| error.to_string())?
         .clear();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    #[test]
+    fn records_without_duplicates_and_saves_a_timestamped_file() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after UNIX epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "twitch-text-flow-overlay-audience-{}-{unique}",
+            std::process::id()
+        ));
+        let state = AudienceState::new(directory.clone());
+
+        record(&state, "comment", "viewer").expect("first record should succeed");
+        record(&state, "comment", "viewer").expect("duplicate record should succeed");
+        let status = save(&state).expect("save should succeed");
+
+        assert_eq!(status.total, 1);
+        let path = PathBuf::from(&status.path);
+        assert_eq!(path.parent(), Some(directory.as_path()));
+        assert!(path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("audience_") && name.ends_with(".md")));
+        let contents = fs::read_to_string(&path).expect("saved file should be readable");
+        assert!(contents.contains("viewer"));
+
+        fs::remove_file(path).expect("test output file should be removable");
+        fs::remove_dir(directory).expect("test output directory should be removable");
+    }
 }

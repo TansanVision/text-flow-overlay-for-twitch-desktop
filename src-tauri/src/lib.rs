@@ -52,7 +52,9 @@ pub fn run() {
         ))
         .manage(settings)
         .manage(custom_stamps)
-        .manage(audience::AudienceState::new(data_directory.join("audience")))
+        .manage(audience::AudienceState::new(
+            data_directory.join("audience"),
+        ))
         .manage(OverlayWindowPositionState {
             previous_position: Mutex::new(None),
         })
@@ -70,7 +72,6 @@ pub fn run() {
             custom_stamps::open_custom_stamp_directory,
             custom_stamps::save_custom_stamp_definitions,
             external_emotes::get_external_emotes,
-            audience::record_audience_interaction,
             audience::save_audience_interactions,
             audience::open_audience_directory,
             audience::clear_audience_interactions,

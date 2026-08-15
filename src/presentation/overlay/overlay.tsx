@@ -5,8 +5,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Language } from '../i18n';
 import { BuiltInEffect } from './built-in-effect';
-import { type CommentSize, type EffectCommand, parseCommands } from './comment-command';
+import {
+  type CommentSize,
+  type EffectCommand,
+  isCustomStampHelpCommand,
+  parseCommands,
+} from './comment-command';
 import { shouldFilterComment, splitByBreaklineCommand, tokenizeKeywords } from './comment-pipeline';
+import { CustomCommandHelp, type HelpStamp } from './custom-command-help';
 import { FallingStamps } from './falling-stamps';
 import { type Raid, RaidIntro } from './raid-intro';
 import './style.css';
@@ -40,11 +46,11 @@ type IncomingChatMessage = {
   id: string;
   fragments: ChatFragment[];
   authorName?: string;
-  authorUserId?: string;
   interactionType?: string;
 };
 type ActiveEffect = { id: string; type: EffectCommand };
 type ActiveFallingStamp = { id: string; dataUri: string };
+type HelpRequest = { id: string; stamps: HelpStamp[] };
 
 type OverlaySettings = {
   language: Language;
@@ -178,6 +184,7 @@ export function Overlay(): React.JSX.Element {
   const [effects, setEffects] = useState<ActiveEffect[]>([]);
   const [fallingStamps, setFallingStamps] = useState<ActiveFallingStamp[]>([]);
   const [raids, setRaids] = useState<Raid[]>([]);
+  const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
 
   useEffect(() => {
     void i18n.changeLanguage(settings.language);
@@ -187,25 +194,23 @@ export function Overlay(): React.JSX.Element {
   useEffect(() => {
     const unlisten = listen<Raid>('twitch-raid', ({ payload }) => {
       setRaids((current) => [...current, payload]);
-      void invoke('record_audience_interaction', {
-        kind: 'raid',
-        name: payload.displayName,
-        userId: payload.broadcasterUserId ?? '',
-      });
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
 
   useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
-      if (payload.authorName) {
-        void invoke('record_audience_interaction', {
-          kind: payload.interactionType ?? 'comment',
-          name: payload.authorName,
-          userId: payload.authorUserId ?? '',
-        }).catch((error: unknown) => console.error('Failed to record audience interaction', error));
-      }
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
+      if (isCustomStampHelpCommand(fullText)) {
+        const stamps = [...customStamps.values()].map(({ commandName, dataUri }) => ({
+          commandName,
+          dataUri,
+        }));
+        if (stamps.length > 0) {
+          setHelpRequests((current) => [...current, { id: payload.id, stamps }]);
+        }
+        return;
+      }
       if (shouldFilterComment(fullText)) return;
       const commands = parseCommands(fullText);
       const size = commands.size ?? settings.defaultSize;
@@ -288,6 +293,9 @@ export function Overlay(): React.JSX.Element {
   const removeFallingStamp = useCallback((id: string) => {
     setFallingStamps((current) => current.filter((stamp) => stamp.id !== id));
   }, []);
+  const removeHelpRequest = useCallback((id: string) => {
+    setHelpRequests((current) => current.filter((request) => request.id !== id));
+  }, []);
 
   return (
     <main className="overlay" aria-label="Twitch Text Flow Overlay">
@@ -303,6 +311,15 @@ export function Overlay(): React.JSX.Element {
           introductionMode={settings.raidIntroductionMode}
           language={settings.language}
           onComplete={removeRaid}
+        />
+      )}
+      {helpRequests[0] && (
+        <CustomCommandHelp
+          key={helpRequests[0].id}
+          id={helpRequests[0].id}
+          stamps={helpRequests[0].stamps}
+          durationSeconds={settings.commentDurationSeconds}
+          onComplete={removeHelpRequest}
         />
       )}
       {effects.map((effect) => (

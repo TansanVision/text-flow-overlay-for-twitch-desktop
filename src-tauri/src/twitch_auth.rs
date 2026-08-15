@@ -37,13 +37,6 @@ impl TwitchAuthState {
             refresh_task: Mutex::new(None),
         }
     }
-
-    pub fn is_current_user_id(&self, candidate: &str) -> Result<bool, String> {
-        self.user_id
-            .lock()
-            .map_err(|error| error.to_string())
-            .map(|user_id| user_id.as_deref() == Some(candidate))
-    }
 }
 
 #[derive(Clone)]

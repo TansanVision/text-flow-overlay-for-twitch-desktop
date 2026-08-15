@@ -15,7 +15,6 @@ struct ChatMessage {
     id: String,
     fragments: Vec<ChatFragment>,
     author_name: Option<String>,
-    author_user_id: Option<String>,
     interaction_type: String,
 }
 
@@ -113,7 +112,9 @@ async fn connect_and_receive(
                 subscribe_support_events(access_token, broadcaster_user_id, session_id).await?;
             }
             Some("notification") => match message["metadata"]["subscription_type"].as_str() {
-                Some("channel.chat.message") => emit_chat_message(app, &message)?,
+                Some("channel.chat.message") => {
+                    emit_chat_message(app, &message, broadcaster_user_id)?
+                }
                 Some("channel.raid") => {
                     let event = &message["payload"]["event"];
                     if event["from_broadcaster_user_id"].as_str() == Some(broadcaster_user_id) {
@@ -122,11 +123,15 @@ async fn connect_and_receive(
                         emit_raid(app, access_token, &message).await?;
                     }
                 }
-                Some("channel.cheer") => emit_support_message(app, &message, "cheer")?,
-                Some("channel.subscribe" | "channel.subscription.message") => {
-                    emit_support_message(app, &message, "subscribe")?
+                Some("channel.cheer") => {
+                    emit_support_message(app, &message, "cheer", broadcaster_user_id)?
                 }
-                Some("channel.subscription.gift") => emit_support_message(app, &message, "gift")?,
+                Some("channel.subscribe" | "channel.subscription.message") => {
+                    emit_support_message(app, &message, "subscribe", broadcaster_user_id)?
+                }
+                Some("channel.subscription.gift") => {
+                    emit_support_message(app, &message, "gift", broadcaster_user_id)?
+                }
                 _ => {}
             },
             Some("session_reconnect") => return Ok(()),
@@ -227,6 +232,14 @@ async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Resu
     let user_id = event["from_broadcaster_user_id"]
         .as_str()
         .unwrap_or_default();
+    let display_name = event["from_broadcaster_user_name"]
+        .as_str()
+        .unwrap_or_default();
+    crate::audience::record(
+        &app.state::<crate::audience::AudienceState>(),
+        "raid",
+        display_name,
+    )?;
     let profile_image_url = get_profile_image(access_token, user_id).await;
     let clips = get_clips(access_token, user_id).await;
     let raid = RaidMessage {
@@ -234,10 +247,7 @@ async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Resu
             .as_str()
             .unwrap_or_default()
             .to_owned(),
-        display_name: event["from_broadcaster_user_name"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
+        display_name: display_name.to_owned(),
         login: event["from_broadcaster_user_login"]
             .as_str()
             .unwrap_or_default()
@@ -308,7 +318,11 @@ async fn get_profile_image(access_token: &str, user_id: &str) -> Option<String> 
         .map(str::to_owned)
 }
 
-fn emit_chat_message(app: &AppHandle, message: &Value) -> Result<(), String> {
+fn emit_chat_message(
+    app: &AppHandle,
+    message: &Value,
+    broadcaster_user_id: &str,
+) -> Result<(), String> {
     let event = &message["payload"]["event"];
     let fragments = event["message"]["fragments"]
         .as_array()
@@ -328,23 +342,41 @@ fn emit_chat_message(app: &AppHandle, message: &Value) -> Result<(), String> {
                     .to_owned(),
             }]
         });
+    let author_user_id = event["chatter_user_id"].as_str().unwrap_or_default();
+    let author_name = event["chatter_user_name"].as_str();
+    if author_user_id != broadcaster_user_id {
+        if let Some(author_name) = author_name {
+            crate::audience::record(
+                &app.state::<crate::audience::AudienceState>(),
+                "comment",
+                author_name,
+            )?;
+        }
+    }
     let chat = ChatMessage {
         id: event["message_id"].as_str().unwrap_or_default().to_owned(),
         fragments,
-        author_name: event["chatter_user_name"].as_str().map(str::to_owned),
-        author_user_id: event["chatter_user_id"].as_str().map(str::to_owned),
+        author_name: author_name.map(str::to_owned),
         interaction_type: "comment".to_owned(),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
         .map_err(|error| error.to_string())
 }
 
-fn emit_support_message(app: &AppHandle, message: &Value, kind: &str) -> Result<(), String> {
+fn emit_support_message(
+    app: &AppHandle,
+    message: &Value,
+    kind: &str,
+    broadcaster_user_id: &str,
+) -> Result<(), String> {
     let event = &message["payload"]["event"];
     let name = event["user_name"]
         .as_str()
         .or_else(|| event["user_login"].as_str())
         .unwrap_or("匿名ユーザー");
+    if event["user_id"].as_str() != Some(broadcaster_user_id) {
+        crate::audience::record(&app.state::<crate::audience::AudienceState>(), kind, name)?;
+    }
     let text = match kind {
         "cheer" => format!(
             "{name}さんから{} Bits！",
@@ -371,7 +403,6 @@ fn emit_support_message(app: &AppHandle, message: &Value, kind: &str) -> Result<
             text,
         }],
         author_name: Some(name.to_owned()),
-        author_user_id: event["user_id"].as_str().map(str::to_owned),
         interaction_type: kind.to_owned(),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
