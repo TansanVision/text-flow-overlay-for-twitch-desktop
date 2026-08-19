@@ -27,7 +27,6 @@ type Props = {
   duration: number;
   clipsEnabled: boolean;
   clipCount: number;
-  clipMuted: boolean;
   autoShoutout: boolean;
   introductionMode: 'automatic' | 'manual';
   language: Language;
@@ -41,7 +40,6 @@ export function RaidIntro({
   duration,
   clipsEnabled,
   clipCount,
-  clipMuted,
   autoShoutout,
   introductionMode,
   language,
@@ -147,7 +145,7 @@ export function RaidIntro({
     if (!clip) return null;
     const separator = clip.embedUrl.includes('?') ? '&' : '?';
     const parent = window.location.hostname || 'localhost';
-    const source = `${clip.embedUrl}${separator}parent=${encodeURIComponent(parent)}&autoplay=true&muted=${clipMuted}`;
+    const source = `${clip.embedUrl}${separator}parent=${encodeURIComponent(parent)}&autoplay=true&muted=true`;
     return (
       <aside className="raid-clip-player">
         <header>

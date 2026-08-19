@@ -1,9 +1,11 @@
 use std::{fs, net::TcpListener, path::PathBuf, sync::Mutex};
 
+use serde::Serialize;
 use tauri::{webview::WebviewWindowBuilder, WebviewUrl};
 use tauri::{Emitter, Manager, PhysicalPosition, Position};
 
 mod audience;
+mod custom_fonts;
 mod custom_stamps;
 mod external_emotes;
 mod overlay_settings;
@@ -12,6 +14,13 @@ mod twitch_chat;
 
 struct OverlayWindowPositionState {
     previous_position: Mutex<Option<PhysicalPosition<i32>>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeInfo {
+    operating_system: &'static str,
+    architecture: &'static str,
 }
 
 fn find_available_port() -> std::io::Result<u16> {
@@ -28,6 +37,7 @@ fn create_portable_data_directories() -> std::io::Result<PathBuf> {
     fs::create_dir_all(data_directory.join("auth"))?;
     fs::create_dir_all(data_directory.join("config"))?;
     fs::create_dir_all(data_directory.join("custom-stamps"))?;
+    fs::create_dir_all(data_directory.join("fonts"))?;
     fs::create_dir_all(data_directory.join("audience"))?;
     Ok(data_directory)
 }
@@ -43,6 +53,8 @@ pub fn run() {
     .expect("failed to load overlay settings");
     let custom_stamps = custom_stamps::CustomStampsState::new(data_directory.join("custom-stamps"))
         .expect("failed to initialize custom stamps");
+    let custom_fonts = custom_fonts::CustomFontsState::new(data_directory.join("fonts"))
+        .expect("failed to initialize custom fonts");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
@@ -52,6 +64,7 @@ pub fn run() {
         ))
         .manage(settings)
         .manage(custom_stamps)
+        .manage(custom_fonts)
         .manage(audience::AudienceState::new(
             data_directory.join("audience"),
         ))
@@ -71,10 +84,14 @@ pub fn run() {
             custom_stamps::get_custom_stamp_editor_data,
             custom_stamps::open_custom_stamp_directory,
             custom_stamps::save_custom_stamp_definitions,
+            custom_fonts::get_custom_fonts,
+            custom_fonts::reload_custom_fonts,
+            custom_fonts::open_custom_font_directory,
             external_emotes::get_external_emotes,
             audience::save_audience_interactions,
             audience::open_audience_directory,
             audience::clear_audience_interactions,
+            get_runtime_info,
             get_overlay_window_visibility,
             set_overlay_window_visibility,
             notify_manual_raid_ready,
@@ -132,6 +149,24 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn get_runtime_info() -> RuntimeInfo {
+    RuntimeInfo {
+        operating_system: match std::env::consts::OS {
+            "windows" => "Windows",
+            "macos" => "macOS",
+            "linux" => "Linux",
+            value => value,
+        },
+        architecture: match std::env::consts::ARCH {
+            "x86_64" => "x64",
+            "x86" => "x86",
+            "aarch64" => "ARM64",
+            value => value,
+        },
+    }
 }
 
 #[tauri::command]

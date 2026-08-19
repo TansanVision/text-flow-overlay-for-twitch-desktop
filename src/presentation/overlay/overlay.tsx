@@ -3,6 +3,12 @@ import { listen } from '@tauri-apps/api/event';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  type CommentFont,
+  type CustomFont,
+  getCommentFontFamily,
+  installCustomFonts,
+} from '../comment-font';
 import type { Language } from '../i18n';
 import { BuiltInEffect } from './built-in-effect';
 import {
@@ -57,9 +63,9 @@ type OverlaySettings = {
   settingsVersion: number;
   commentDurationSeconds: number;
   defaultSize: CommentSize;
+  commentFont: CommentFont;
   raidClipsEnabled: boolean;
   raidClipCount: number;
-  raidClipMuted: boolean;
   raidIntroSeconds: number;
   raidAutoShoutout: boolean;
   raidIntroductionMode: 'automatic' | 'manual';
@@ -70,9 +76,9 @@ const defaultSettings: OverlaySettings = {
   settingsVersion: 1,
   commentDurationSeconds: 5,
   defaultSize: 'medium',
+  commentFont: 'system',
   raidClipsEnabled: true,
   raidClipCount: 5,
-  raidClipMuted: false,
   raidIntroSeconds: 60,
   raidAutoShoutout: true,
   raidIntroductionMode: 'automatic',
@@ -179,6 +185,7 @@ export function Overlay(): React.JSX.Element {
   const { t, i18n } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
+  const [customFontFamilies, setCustomFontFamilies] = useState<Map<string, string>>(new Map());
   const [customStamps, setCustomStamps] = useState<Map<string, CustomStamp>>(new Map());
   const [customStampsLoadError, setCustomStampsLoadError] = useState<string>();
   const [externalEmotes, setExternalEmotes] = useState<Map<string, string>>(new Map());
@@ -285,6 +292,19 @@ export function Overlay(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const applyFonts = async (fonts: CustomFont[]) => {
+      const result = await installCustomFonts(fonts);
+      setCustomFontFamilies(result.families);
+      for (const error of result.errors) console.error(`Failed to load custom font: ${error}`);
+    };
+    void invoke<CustomFont[]>('get_custom_fonts').then(applyFonts);
+    const unlisten = listen<CustomFont[]>('custom-fonts-updated', ({ payload }) => {
+      void applyFonts(payload);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
     const applyExternalEmotes = (result: ExternalEmoteResult) => {
       setExternalEmotes(new Map(result.emotes.map((emote) => [emote.name, emote.url])));
     };
@@ -337,7 +357,6 @@ export function Overlay(): React.JSX.Element {
           duration={settings.raidIntroSeconds}
           clipsEnabled={settings.raidClipsEnabled}
           clipCount={settings.raidClipCount}
-          clipMuted={settings.raidClipMuted}
           autoShoutout={settings.raidAutoShoutout}
           introductionMode={settings.raidIntroductionMode}
           language={settings.language}
@@ -381,6 +400,7 @@ export function Overlay(): React.JSX.Element {
                 ? `${message.lane * { small: 4, medium: 6, big: 18 }[message.size]}vh`
                 : undefined,
             color: message.color,
+            fontFamily: getCommentFontFamily(settings.commentFont, customFontFamilies),
             animationDuration: `${settings.commentDurationSeconds}s`,
           }}
           onAnimationEnd={() => removeMessage(message.id)}

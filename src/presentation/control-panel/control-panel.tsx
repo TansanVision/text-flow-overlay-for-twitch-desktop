@@ -2,8 +2,15 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  type CommentFont,
+  type CustomFont,
+  commentFonts,
+  getCommentFontFamily,
+  installCustomFonts,
+} from '../comment-font';
 import type { Language } from '../i18n';
 import './style.css';
 
@@ -43,9 +50,9 @@ type OverlaySettings = {
   settingsVersion: number;
   commentDurationSeconds: number;
   defaultSize: 'small' | 'medium' | 'big';
+  commentFont: CommentFont;
   raidClipsEnabled: boolean;
   raidClipCount: number;
-  raidClipMuted: boolean;
   raidIntroSeconds: number;
   raidAutoShoutout: boolean;
   raidIntroductionMode: 'automatic' | 'manual';
@@ -74,6 +81,7 @@ type ManualRaid = {
 };
 type ShoutoutResult = { success: boolean; error?: string };
 type RaidPhaseStatus = { raidId: string; phase: string };
+type RuntimeInfo = { operatingSystem: string; architecture: string };
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -89,9 +97,9 @@ export function ControlPanel(): React.JSX.Element {
     settingsVersion: 1,
     commentDurationSeconds: 5,
     defaultSize: 'medium',
+    commentFont: 'system',
     raidClipsEnabled: true,
     raidClipCount: 5,
-    raidClipMuted: false,
     raidIntroSeconds: 60,
     raidAutoShoutout: true,
     raidIntroductionMode: 'automatic',
@@ -107,6 +115,10 @@ export function ControlPanel(): React.JSX.Element {
     ],
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [customFonts, setCustomFonts] = useState<CustomFont[]>([]);
+  const [customFontFamilies, setCustomFontFamilies] = useState<Map<string, string>>(new Map());
+  const [customFontsLoaded, setCustomFontsLoaded] = useState(false);
+  const [customFontErrors, setCustomFontErrors] = useState<string[]>([]);
   const [customStampCount, setCustomStampCount] = useState(0);
   const [stampDefinitions, setStampDefinitions] = useState<EditableStampDefinition[]>([]);
   const [stampImageFiles, setStampImageFiles] = useState<string[]>([]);
@@ -123,6 +135,7 @@ export function ControlPanel(): React.JSX.Element {
   const [shoutoutInProgress, setShoutoutInProgress] = useState<string>();
   const [shoutoutResult, setShoutoutResult] = useState<ShoutoutResult>();
   const [raidPhaseStatus, setRaidPhaseStatus] = useState<RaidPhaseStatus>();
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo>();
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
 
   useEffect(() => {
@@ -147,6 +160,38 @@ export function ControlPanel(): React.JSX.Element {
       .catch((reason: unknown) => setError(String(reason)));
   }, []);
 
+  const applyCustomFonts = useCallback(async (fonts: CustomFont[]) => {
+    const result = await installCustomFonts(fonts);
+    setCustomFonts(result.availableFonts);
+    setCustomFontFamilies(result.families);
+    setCustomFontErrors(result.errors);
+    setCustomFontsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    void invoke<CustomFont[]>('get_custom_fonts')
+      .then(applyCustomFonts)
+      .catch((reason: unknown) => {
+        setCustomFontsLoaded(true);
+        setError(String(reason));
+      });
+  }, [applyCustomFonts]);
+
+  useEffect(() => {
+    if (
+      !customFontsLoaded ||
+      !overlaySettings.commentFont.startsWith('custom:') ||
+      customFontFamilies.has(overlaySettings.commentFont)
+    ) {
+      return;
+    }
+    const settings: OverlaySettings = { ...overlaySettings, commentFont: 'system' };
+    setOverlaySettings(settings);
+    void invoke('save_overlay_settings', { settings }).catch((reason: unknown) =>
+      setError(String(reason)),
+    );
+  }, [customFontFamilies, customFontsLoaded, overlaySettings]);
+
   useEffect(() => {
     const unlisten = listen<ManualRaid>('manual-raid-ready', ({ payload }) => {
       setManualRaids((current) =>
@@ -168,6 +213,12 @@ export function ControlPanel(): React.JSX.Element {
       setRaidPhaseStatus(payload);
     });
     return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
+    void invoke<RuntimeInfo>('get_runtime_info')
+      .then(setRuntimeInfo)
+      .catch((reason: unknown) => setError(String(reason)));
   }, []);
 
   useEffect(() => {
@@ -311,6 +362,26 @@ export function ControlPanel(): React.JSX.Element {
       await invoke('save_overlay_settings', { settings: overlaySettings });
       setSettingsSaved(true);
       window.setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+
+  const reloadCustomFonts = async () => {
+    try {
+      setCustomFontsLoaded(false);
+      await applyCustomFonts(await invoke<CustomFont[]>('reload_custom_fonts'));
+      setError(undefined);
+    } catch (reason) {
+      setCustomFontsLoaded(true);
+      setError(String(reason));
+    }
+  };
+
+  const openCustomFontDirectory = async () => {
+    try {
+      await invoke('open_custom_font_directory');
+      setError(undefined);
     } catch (reason) {
       setError(String(reason));
     }
@@ -578,6 +649,56 @@ export function ControlPanel(): React.JSX.Element {
               }))
             }
           />
+          <label htmlFor="comment-font">{t('commentFont')}</label>
+          <select
+            id="comment-font"
+            value={overlaySettings.commentFont}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                commentFont: event.target.value as CommentFont,
+              }))
+            }
+          >
+            <optgroup label={t('standardFonts')}>
+              {commentFonts.map((font) => (
+                <option key={font} value={font}>
+                  {t(`commentFont_${font}`)}
+                </option>
+              ))}
+            </optgroup>
+            {customFonts.length > 0 && (
+              <optgroup label={t('customFonts')}>
+                {customFonts.map((font) => (
+                  <option key={font.id} value={font.id}>
+                    {font.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+        <p
+          className="font-preview"
+          style={{
+            fontFamily: getCommentFontFamily(overlaySettings.commentFont, customFontFamilies),
+          }}
+        >
+          {t('fontPreview')}
+        </p>
+        <p className="help-text">{t('customFontHelp', { count: customFonts.length })}</p>
+        {customFontErrors.map((fontError) => (
+          <p className="provider-error" key={fontError}>
+            {t('customFontLoadFailed', { error: fontError })}
+          </p>
+        ))}
+        <div className="button-row">
+          <button type="button" className="secondary-button" onClick={openCustomFontDirectory}>
+            {t('openFontFolder')}
+          </button>
+          <button type="button" className="secondary-button" onClick={reloadCustomFonts}>
+            {t('reloadFonts')}
+          </button>
         </div>
         <button type="button" onClick={() => void saveSettings()}>
           {t('saveSettings')}
@@ -673,20 +794,6 @@ export function ControlPanel(): React.JSX.Element {
                     {t('items', { count })}
                   </option>
                 ))}
-              </select>
-              <label htmlFor="raid-clip-muted">{t('clipAudio')}</label>
-              <select
-                id="raid-clip-muted"
-                value={overlaySettings.raidClipMuted ? 'muted' : 'sound'}
-                onChange={(event) =>
-                  setOverlaySettings((current) => ({
-                    ...current,
-                    raidClipMuted: event.target.value === 'muted',
-                  }))
-                }
-              >
-                <option value="sound">{t('sound')}</option>
-                <option value="muted">{t('muted')}</option>
               </select>
               <label htmlFor="raid-auto-shoutout">{t('autoShoutout')}</label>
               <input
@@ -856,7 +963,11 @@ export function ControlPanel(): React.JSX.Element {
         <h2 id="runtime-title">{t('runtime')}</h2>
         <dl>
           <dt>{t('environment')}</dt>
-          <dd>{navigator.platform}</dd>
+          <dd>
+            {runtimeInfo
+              ? `${runtimeInfo.operatingSystem} (${runtimeInfo.architecture})`
+              : t('unavailable')}
+          </dd>
           <dt>localhost</dt>
           <dd>{port ? `localhost:${port}` : t('unavailable')}</dd>
           <dt>{t('portSetting')}</dt>

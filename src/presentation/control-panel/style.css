@@ -125,6 +125,18 @@ body.control-panel-page #root {
   font-size: 13px;
 }
 
+.font-preview {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid #484153;
+  border-radius: 8px;
+  color: #fff;
+  background: #111016;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
 .provider-error {
   color: #ffb36b;
 }

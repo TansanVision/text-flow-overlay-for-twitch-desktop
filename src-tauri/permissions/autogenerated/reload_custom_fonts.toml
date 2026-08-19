@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reload-custom-fonts"
+description = "Enables the reload_custom_fonts command without any pre-configured scope."
+commands.allow = ["reload_custom_fonts"]
+
+[[permission]]
+identifier = "deny-reload-custom-fonts"
+description = "Denies the reload_custom_fonts command without any pre-configured scope."
+commands.deny = ["reload_custom_fonts"]

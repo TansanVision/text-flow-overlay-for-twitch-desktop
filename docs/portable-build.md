@@ -38,7 +38,8 @@ Twitch Text Flow Overlay/
    ├─ auth/
    ├─ config/
    ├─ custom-stamps/
-   └─ audience.md
+   ├─ fonts/
+   └─ audience/
 ```
 
 更新時は`portable-data`を残し、exeを新しいものへ差し替える。別PCへ移行する場合はフォルダ全体をコピーする。

@@ -11,6 +11,7 @@
     "core:event:allow-listen",
     "allow-get-overlay-settings",
     "allow-get-custom-stamps",
+    "allow-get-custom-fonts",
     "allow-get-external-emotes",
     "allow-notify-manual-raid-ready",
     "allow-notify-raid-phase",

@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -10,9 +14,9 @@ pub struct OverlaySettings {
     pub settings_version: u8,
     pub comment_duration_seconds: f64,
     pub default_size: String,
+    pub comment_font: String,
     pub raid_clips_enabled: bool,
     pub raid_clip_count: u8,
-    pub raid_clip_muted: bool,
     pub raid_intro_seconds: u64,
     pub raid_auto_shoutout: bool,
     pub raid_introduction_mode: String,
@@ -26,9 +30,9 @@ impl Default for OverlaySettings {
             settings_version: 1,
             comment_duration_seconds: 5.0,
             default_size: "medium".to_owned(),
+            comment_font: "system".to_owned(),
             raid_clips_enabled: true,
             raid_clip_count: 5,
-            raid_clip_muted: false,
             raid_intro_seconds: 60,
             raid_auto_shoutout: true,
             raid_introduction_mode: "automatic".to_owned(),
@@ -119,6 +123,9 @@ fn validate(settings: &OverlaySettings) -> Result<(), String> {
     if !matches!(settings.default_size.as_str(), "small" | "medium" | "big") {
         return Err("既定サイズが不正です".into());
     }
+    if !valid_comment_font(&settings.comment_font) {
+        return Err("コメントフォントが不正です".into());
+    }
     if !(1..=5).contains(&settings.raid_clip_count) {
         return Err("Raidクリップの再生本数は1～5件で指定してください".into());
     }
@@ -132,6 +139,38 @@ fn validate(settings: &OverlaySettings) -> Result<(), String> {
         return Err("Raid紹介モードが不正です".into());
     }
     Ok(())
+}
+
+fn valid_comment_font(value: &str) -> bool {
+    if matches!(
+        value,
+        "system"
+            | "yu-gothic"
+            | "meiryo"
+            | "biz-udp-gothic"
+            | "ms-gothic"
+            | "yu-mincho"
+            | "biz-udp-mincho"
+            | "ms-mincho"
+            | "arial"
+            | "verdana"
+            | "georgia"
+            | "monospace"
+    ) {
+        return true;
+    }
+    let Some(file_name) = value.strip_prefix("custom:") else {
+        return false;
+    };
+    let path = Path::new(file_name);
+    path.file_name().and_then(|value| value.to_str()) == Some(file_name)
+        && matches!(
+            path.extension()
+                .and_then(|value| value.to_str())
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("ttf" | "otf" | "woff" | "woff2")
+        )
 }
 
 fn write_settings(path: &PathBuf, settings: &OverlaySettings) -> Result<(), String> {
