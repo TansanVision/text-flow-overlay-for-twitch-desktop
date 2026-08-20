@@ -29,6 +29,7 @@
     "allow-get-overlay-window-visibility",
     "allow-set-overlay-window-visibility",
     "allow-notify-manual-raid-ready",
+    "allow-play-manual-raid-clips",
     "allow-notify-raid-phase",
     "allow-emit-overlay-test",
     {

@@ -57,6 +57,13 @@ pub fn run() {
         .expect("failed to initialize custom fonts");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(control_panel) = app.get_webview_window("control-panel") {
+                let _ = control_panel.unminimize();
+                let _ = control_panel.show();
+                let _ = control_panel.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
         .plugin(tauri_plugin_opener::init())
         .manage(twitch_auth::TwitchAuthState::new(
@@ -95,6 +102,8 @@ pub fn run() {
             get_overlay_window_visibility,
             set_overlay_window_visibility,
             notify_manual_raid_ready,
+            play_manual_raid_clips,
+            notify_manual_raid_clips_completed,
             notify_raid_phase,
             emit_overlay_test
         ])
@@ -173,6 +182,25 @@ fn get_runtime_info() -> RuntimeInfo {
 fn notify_manual_raid_ready(app: tauri::AppHandle, raid: serde_json::Value) -> Result<(), String> {
     app.emit_to("control-panel", "manual-raid-ready", raid)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn play_manual_raid_clips(app: tauri::AppHandle, raid: serde_json::Value) -> Result<(), String> {
+    app.emit_to("overlay", "manual-raid-clips-requested", raid)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn notify_manual_raid_clips_completed(
+    app: tauri::AppHandle,
+    raid_id: String,
+) -> Result<(), String> {
+    app.emit_to(
+        "control-panel",
+        "manual-raid-clips-completed",
+        serde_json::json!({ "raidId": raid_id }),
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -25,6 +25,8 @@ fn main() {
                 "get_overlay_window_visibility",
                 "set_overlay_window_visibility",
                 "notify_manual_raid_ready",
+                "play_manual_raid_clips",
+                "notify_manual_raid_clips_completed",
                 "notify_raid_phase",
                 "emit_overlay_test",
             ]),

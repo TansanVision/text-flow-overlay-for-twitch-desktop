@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   type CommentFont,
@@ -71,6 +71,13 @@ type ExternalEmoteResult = {
   providers: { provider: string; count: number; error?: string }[];
 };
 type AudienceStatus = { total: number; path: string };
+type ManualRaidClip = {
+  id: string;
+  title: string;
+  embedUrl: string;
+  duration: number;
+  viewCount: number;
+};
 type ManualRaid = {
   id: string;
   displayName: string;
@@ -78,10 +85,19 @@ type ManualRaid = {
   broadcasterUserId?: string;
   viewerCount: number;
   profileImageUrl?: string;
+  clips: ManualRaidClip[];
+  clipsEnabled: boolean;
+  shoutoutEnabled: boolean;
+  clipsInProgress?: boolean;
+  clipsCompleted?: boolean;
+  shoutoutCompleted?: boolean;
 };
-type ShoutoutResult = { success: boolean; error?: string };
+type ShoutoutResult = { success: boolean; error?: string; raiderUserId?: string };
 type RaidPhaseStatus = { raidId: string; phase: string };
 type RuntimeInfo = { operatingSystem: string; architecture: string };
+
+const SHOUTOUT_COOLDOWN_MS = 2 * 60 * 1000;
+const SHOUTOUT_TARGET_COOLDOWN_MS = 60 * 60 * 1000;
 
 const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
 
@@ -133,10 +149,51 @@ export function ControlPanel(): React.JSX.Element {
   const [overlayWindowVisible, setOverlayWindowVisible] = useState(true);
   const [manualRaids, setManualRaids] = useState<ManualRaid[]>([]);
   const [shoutoutInProgress, setShoutoutInProgress] = useState<string>();
+  const manualShoutoutRequest = useRef<string | undefined>(undefined);
   const [shoutoutResult, setShoutoutResult] = useState<ShoutoutResult>();
+  const [shoutoutClock, setShoutoutClock] = useState(() => Date.now());
+  const [shoutoutCooldowns, setShoutoutCooldowns] = useState<{
+    globalUntil: number;
+    targets: Record<string, number>;
+  }>({ globalUntil: 0, targets: {} });
   const [raidPhaseStatus, setRaidPhaseStatus] = useState<RaidPhaseStatus>();
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo>();
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
+
+  const registerSuccessfulShoutout = useCallback((raiderUserId?: string) => {
+    const sentAt = Date.now();
+    setShoutoutClock(sentAt);
+    setShoutoutCooldowns((current) => ({
+      globalUntil: Math.max(current.globalUntil, sentAt + SHOUTOUT_COOLDOWN_MS),
+      targets: raiderUserId
+        ? {
+            ...current.targets,
+            [raiderUserId]: Math.max(
+              current.targets[raiderUserId] ?? 0,
+              sentAt + SHOUTOUT_TARGET_COOLDOWN_MS,
+            ),
+          }
+        : current.targets,
+    }));
+  }, []);
+
+  const completeManualRaidAction = useCallback((raidId: string, action: 'clips' | 'shoutout') => {
+    setManualRaids((current) =>
+      current.flatMap((raid) => {
+        if (raid.id !== raidId) return [raid];
+        const updated: ManualRaid = {
+          ...raid,
+          clipsInProgress: action === 'clips' ? false : raid.clipsInProgress,
+          clipsCompleted: action === 'clips' ? true : raid.clipsCompleted,
+          shoutoutCompleted: action === 'shoutout' ? true : raid.shoutoutCompleted,
+        };
+        const clipsFinished =
+          !updated.clipsEnabled || updated.clips.length === 0 || updated.clipsCompleted;
+        const shoutoutFinished = !updated.shoutoutEnabled || updated.shoutoutCompleted;
+        return clipsFinished && shoutoutFinished ? [] : [updated];
+      }),
+    );
+  }, []);
 
   useEffect(() => {
     void i18n.changeLanguage(overlaySettings.language);
@@ -202,11 +259,25 @@ export function ControlPanel(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<ShoutoutResult>('shoutout-result', ({ payload }) => {
-      setShoutoutResult(payload);
+    const unlisten = listen<{ raidId: string }>('manual-raid-clips-completed', ({ payload }) => {
+      completeManualRaidAction(payload.raidId, 'clips');
     });
     return () => void unlisten.then((dispose) => dispose());
-  }, []);
+  }, [completeManualRaidAction]);
+
+  useEffect(() => {
+    const unlisten = listen<ShoutoutResult>('shoutout-result', ({ payload }) => {
+      setShoutoutResult(payload);
+      if (payload.success) registerSuccessfulShoutout(payload.raiderUserId);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, [registerSuccessfulShoutout]);
+
+  useEffect(() => {
+    if (manualRaids.length === 0) return;
+    const timer = window.setInterval(() => setShoutoutClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [manualRaids.length]);
 
   useEffect(() => {
     const unlisten = listen<RaidPhaseStatus>('raid-phase-updated', ({ payload }) => {
@@ -519,16 +590,53 @@ export function ControlPanel(): React.JSX.Element {
       setError(t('missingUserId'));
       return;
     }
+    if (manualShoutoutRequest.current) return;
+    const cooldownUntil = Math.max(
+      shoutoutCooldowns.globalUntil,
+      shoutoutCooldowns.targets[raid.broadcasterUserId] ?? 0,
+    );
+    if (cooldownUntil > Date.now()) {
+      setError(
+        t('shoutoutCooldown', {
+          seconds: Math.ceil((cooldownUntil - Date.now()) / 1000),
+        }),
+      );
+      return;
+    }
+    manualShoutoutRequest.current = raid.id;
     setShoutoutInProgress(raid.id);
     try {
       await invoke('send_twitch_shoutout', { raiderUserId: raid.broadcasterUserId });
-      setManualRaids((current) => current.filter((item) => item.id !== raid.id));
+      completeManualRaidAction(raid.id, 'shoutout');
       setError(undefined);
     } catch (reason) {
       setError(String(reason));
     } finally {
-      setShoutoutInProgress(undefined);
+      if (manualShoutoutRequest.current === raid.id) {
+        manualShoutoutRequest.current = undefined;
+      }
+      setShoutoutInProgress((current) => (current === raid.id ? undefined : current));
     }
+  };
+
+  const playManualRaidClips = async (raid: ManualRaid) => {
+    if (raid.clips.length === 0 || raid.clipsInProgress || raid.clipsCompleted) return;
+    setManualRaids((current) =>
+      current.map((item) => (item.id === raid.id ? { ...item, clipsInProgress: true } : item)),
+    );
+    try {
+      await invoke('play_manual_raid_clips', { raid });
+      setError(undefined);
+    } catch (reason) {
+      setManualRaids((current) =>
+        current.map((item) => (item.id === raid.id ? { ...item, clipsInProgress: false } : item)),
+      );
+      setError(String(reason));
+    }
+  };
+
+  const closeManualRaid = (raidId: string) => {
+    setManualRaids((current) => current.filter((raid) => raid.id !== raidId));
   };
 
   useEffect(() => {
@@ -764,50 +872,48 @@ export function ControlPanel(): React.JSX.Element {
               }))
             }
           />
-          {overlaySettings.raidIntroductionMode === 'automatic' && (
-            <>
-              <label htmlFor="raid-clips-enabled">{t('clipPlayback')}</label>
-              <input
-                id="raid-clips-enabled"
-                type="checkbox"
-                checked={overlaySettings.raidClipsEnabled}
-                onChange={(event) =>
-                  setOverlaySettings((current) => ({
-                    ...current,
-                    raidClipsEnabled: event.target.checked,
-                  }))
-                }
-              />
-              <label htmlFor="raid-clip-count">{t('clipCount')}</label>
-              <select
-                id="raid-clip-count"
-                value={overlaySettings.raidClipCount}
-                onChange={(event) =>
-                  setOverlaySettings((current) => ({
-                    ...current,
-                    raidClipCount: Number(event.target.value),
-                  }))
-                }
-              >
-                {[1, 2, 3, 4, 5].map((count) => (
-                  <option key={count} value={count}>
-                    {t('items', { count })}
-                  </option>
-                ))}
-              </select>
-              <label htmlFor="raid-auto-shoutout">{t('autoShoutout')}</label>
-              <input
-                id="raid-auto-shoutout"
-                type="checkbox"
-                checked={overlaySettings.raidAutoShoutout}
-                onChange={(event) => void changeRaidAutoShoutout(event.target.checked)}
-              />
-            </>
-          )}
+          <label htmlFor="raid-clips-enabled">{t('clipPlayback')}</label>
+          <input
+            id="raid-clips-enabled"
+            type="checkbox"
+            checked={overlaySettings.raidClipsEnabled}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidClipsEnabled: event.target.checked,
+              }))
+            }
+          />
+          <label htmlFor="raid-clip-count">{t('clipCount')}</label>
+          <select
+            id="raid-clip-count"
+            value={overlaySettings.raidClipCount}
+            onChange={(event) =>
+              setOverlaySettings((current) => ({
+                ...current,
+                raidClipCount: Number(event.target.value),
+              }))
+            }
+          >
+            {[1, 2, 3, 4, 5].map((count) => (
+              <option key={count} value={count}>
+                {t('items', { count })}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="raid-auto-shoutout">
+            {overlaySettings.raidIntroductionMode === 'manual'
+              ? t('manualShoutoutAction')
+              : t('autoShoutout')}
+          </label>
+          <input
+            id="raid-auto-shoutout"
+            type="checkbox"
+            checked={overlaySettings.raidAutoShoutout}
+            onChange={(event) => void changeRaidAutoShoutout(event.target.checked)}
+          />
         </div>
-        {overlaySettings.raidIntroductionMode === 'automatic' && (
-          <p className="help-text">{t('clipHelp')}</p>
-        )}
+        <p className="help-text">{t('clipHelp')}</p>
         <button type="button" onClick={() => void saveSettings()}>
           {t('saveRaid')}
         </button>
@@ -830,24 +936,75 @@ export function ControlPanel(): React.JSX.Element {
         <section className="panel manual-raid-panel" aria-labelledby="manual-raid-title">
           <h2 id="manual-raid-title">{t('manualRaid')}</h2>
           <p className="help-text">{t('manualRaidHelp')}</p>
-          {manualRaids.map((raid) => (
-            <article className="manual-raid-card" key={raid.id}>
-              {raid.profileImageUrl && <img src={raid.profileImageUrl} alt="" />}
-              <div>
-                <strong>{raid.displayName}</strong>
-                <small>
-                  @{raid.login} · {t('viewersRaid', { count: raid.viewerCount })}
-                </small>
-              </div>
-              <button
-                type="button"
-                onClick={() => void sendManualShoutout(raid)}
-                disabled={!raid.broadcasterUserId || shoutoutInProgress === raid.id}
-              >
-                {shoutoutInProgress === raid.id ? t('sending') : t('shoutout')}
-              </button>
-            </article>
-          ))}
+          {manualRaids.map((raid) => {
+            const cooldownUntil = raid.broadcasterUserId
+              ? Math.max(
+                  shoutoutCooldowns.globalUntil,
+                  shoutoutCooldowns.targets[raid.broadcasterUserId] ?? 0,
+                )
+              : shoutoutCooldowns.globalUntil;
+            const cooldownSeconds = Math.max(Math.ceil((cooldownUntil - shoutoutClock) / 1000), 0);
+            return (
+              <article className="manual-raid-card" key={raid.id}>
+                <button
+                  className="manual-raid-close"
+                  type="button"
+                  aria-label={t('closeManualRaid', { name: raid.displayName })}
+                  title={t('closeManualRaid', { name: raid.displayName })}
+                  onClick={() => closeManualRaid(raid.id)}
+                >
+                  ×
+                </button>
+                <div className="manual-raid-user">
+                  {raid.profileImageUrl && <img src={raid.profileImageUrl} alt="" />}
+                  <div className="manual-raid-user-info">
+                    <strong>{raid.displayName}</strong>
+                    <small>
+                      @{raid.login} · {t('viewersRaid', { count: raid.viewerCount })}
+                    </small>
+                  </div>
+                </div>
+                <div className="manual-raid-actions">
+                  {raid.clipsEnabled && raid.clips.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void playManualRaidClips(raid)}
+                      disabled={raid.clipsInProgress || raid.clipsCompleted}
+                    >
+                      {raid.clipsCompleted
+                        ? t('raidClipsPlayed')
+                        : raid.clipsInProgress
+                          ? t('playingRaidClips')
+                          : t('playRaidClips', { count: raid.clips.length })}
+                    </button>
+                  )}
+                  {raid.clipsEnabled && raid.clips.length === 0 && (
+                    <span className="manual-raid-status">{t('noRaidClips')}</span>
+                  )}
+                  {raid.shoutoutEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => void sendManualShoutout(raid)}
+                      disabled={
+                        raid.shoutoutCompleted ||
+                        !raid.broadcasterUserId ||
+                        shoutoutInProgress !== undefined ||
+                        cooldownSeconds > 0
+                      }
+                    >
+                      {raid.shoutoutCompleted
+                        ? t('shoutoutSent')
+                        : shoutoutInProgress === raid.id
+                          ? t('sending')
+                          : cooldownSeconds > 0
+                            ? t('shoutoutCooldownButton', { seconds: cooldownSeconds })
+                            : t('shoutout')}
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </section>
       )}
 

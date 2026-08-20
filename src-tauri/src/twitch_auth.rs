@@ -443,8 +443,15 @@ pub async fn send_twitch_shoutout(
     }
     .await;
     let payload = match &result {
-        Ok(()) => serde_json::json!({ "success": true }),
-        Err(error) => serde_json::json!({ "success": false, "error": error }),
+        Ok(()) => serde_json::json!({
+            "success": true,
+            "raiderUserId": raider_user_id,
+        }),
+        Err(error) => serde_json::json!({
+            "success": false,
+            "error": error,
+            "raiderUserId": raider_user_id,
+        }),
     };
     if let Err(error) = app.emit_to("control-panel", "shoutout-result", payload) {
         log::warn!("Failed to emit shoutout result: {error}");

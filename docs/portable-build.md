@@ -44,6 +44,12 @@ Twitch Text Flow Overlay/
 
 更新時は`portable-data`を残し、exeを新しいものへ差し替える。別PCへ移行する場合はフォルダ全体をコピーする。
 
+## 多重起動
+
+アプリは同時に1プロセスだけ起動する。すでに起動している状態でもう一度exeを実行した場合、新しいプロセスは終了し、既存のコンパネを最小化解除して前面へ表示する。
+
+単一起動の判定にユーザーデータ領域のファイルは使用しない。設定や認証情報の保存場所は引き続きexe横の`portable-data`である。
+
 ## 実行要件
 
 WindowsではMicrosoft Edge WebView2 Runtimeを使用する。Windows 10・11の多くの環境には導入済みだが、存在しない環境ではMicrosoftからWebView2 Runtimeを導入する必要がある。

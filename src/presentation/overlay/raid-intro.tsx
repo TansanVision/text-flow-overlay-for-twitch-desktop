@@ -12,6 +12,7 @@ export type Raid = {
   viewerCount: number;
   profileImageUrl?: string;
   clips?: RaidClip[];
+  presentation?: 'raid' | 'manual-clips';
 };
 
 export type RaidClip = {
@@ -30,6 +31,8 @@ type Props = {
   autoShoutout: boolean;
   introductionMode: 'automatic' | 'manual';
   language: Language;
+  initialPhase?: 'intro' | 'clips';
+  clipsOnly?: boolean;
   onComplete: (id: string) => void;
 };
 
@@ -43,14 +46,17 @@ export function RaidIntro({
   autoShoutout,
   introductionMode,
   language,
+  initialPhase = 'intro',
+  clipsOnly = false,
   onComplete,
 }: Props): React.JSX.Element | null {
   const { t, i18n } = useTranslation();
   const [remaining, setRemaining] = useState(duration);
-  const [phase, setPhase] = useState<RaidPhase>('intro');
+  const [phase, setPhase] = useState<RaidPhase>(initialPhase);
   const [clipIndex, setClipIndex] = useState(0);
   const introCompleted = useRef(false);
   const manualNotificationStarted = useRef(false);
+  const clipPlaybackCompleted = useRef(false);
   const shoutoutStarted = useRef(false);
   const clips = useMemo(
     () => (clipsEnabled ? (raid.clips ?? []).slice(0, clipCount) : []),
@@ -77,13 +83,34 @@ export function RaidIntro({
   useEffect(() => {
     if (phase !== 'manual-notify' || manualNotificationStarted.current) return;
     manualNotificationStarted.current = true;
-    const notification = invoke('notify_manual_raid_ready', { raid });
+    const notification = invoke('notify_manual_raid_ready', {
+      raid: {
+        ...raid,
+        clips,
+        clipsEnabled,
+        shoutoutEnabled: autoShoutout,
+      },
+    });
     setPhase('completed');
     onComplete(raid.id);
     void notification.catch((error: unknown) =>
       console.error('Failed to notify the control panel about a manual Raid', error),
     );
-  }, [onComplete, phase, raid]);
+  }, [autoShoutout, clips, clipsEnabled, onComplete, phase, raid]);
+
+  const completeClipPlayback = useCallback(() => {
+    if (!clipsOnly) {
+      setPhase('shoutout');
+      return;
+    }
+    if (clipPlaybackCompleted.current) return;
+    clipPlaybackCompleted.current = true;
+    setPhase('completed');
+    onComplete(raid.id);
+    void invoke('notify_manual_raid_clips_completed', { raidId: raid.id }).catch((error: unknown) =>
+      console.error('Failed to report manual Raid clip completion', error),
+    );
+  }, [clipsOnly, onComplete, raid.id]);
 
   useEffect(() => {
     if (phase !== 'intro') return;
@@ -102,18 +129,18 @@ export function RaidIntro({
     if (phase !== 'clips') return;
     const clip = clips[clipIndex];
     if (!clip) {
-      setPhase('shoutout');
+      completeClipPlayback();
       return;
     }
     const timer = window.setTimeout(
       () => {
         if (clipIndex + 1 < clips.length) setClipIndex((current) => current + 1);
-        else setPhase('shoutout');
+        else completeClipPlayback();
       },
       Math.max(clip.duration || 30, 1) * 1000,
     );
     return () => window.clearTimeout(timer);
-  }, [clipIndex, clips, phase]);
+  }, [clipIndex, clips, completeClipPlayback, phase]);
 
   useEffect(() => {
     if (phase !== 'shoutout' || shoutoutStarted.current) return;

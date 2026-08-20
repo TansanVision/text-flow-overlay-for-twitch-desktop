@@ -225,7 +225,18 @@ export function Overlay(): React.JSX.Element {
 
   useEffect(() => {
     const unlisten = listen<Raid>('twitch-raid', ({ payload }) => {
-      setRaids((current) => [...current, payload]);
+      setRaids((current) => [...current, { ...payload, presentation: 'raid' }]);
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<Raid>('manual-raid-clips-requested', ({ payload }) => {
+      setRaids((current) =>
+        current.some((raid) => raid.id === payload.id && raid.presentation === 'manual-clips')
+          ? current
+          : [...current, { ...payload, presentation: 'manual-clips' }],
+      );
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
@@ -352,14 +363,24 @@ export function Overlay(): React.JSX.Element {
     <main className="overlay" aria-label="Twitch Text Flow Overlay">
       {raids[0] && (
         <RaidIntro
-          key={raids[0].id}
+          key={`${raids[0].presentation ?? 'raid'}-${raids[0].id}`}
           raid={raids[0]}
           duration={settings.raidIntroSeconds}
-          clipsEnabled={settings.raidClipsEnabled}
-          clipCount={settings.raidClipCount}
-          autoShoutout={settings.raidAutoShoutout}
-          introductionMode={settings.raidIntroductionMode}
+          clipsEnabled={raids[0].presentation === 'manual-clips' ? true : settings.raidClipsEnabled}
+          clipCount={
+            raids[0].presentation === 'manual-clips'
+              ? (raids[0].clips?.length ?? 0)
+              : settings.raidClipCount
+          }
+          autoShoutout={
+            raids[0].presentation === 'manual-clips' ? false : settings.raidAutoShoutout
+          }
+          introductionMode={
+            raids[0].presentation === 'manual-clips' ? 'automatic' : settings.raidIntroductionMode
+          }
           language={settings.language}
+          initialPhase={raids[0].presentation === 'manual-clips' ? 'clips' : 'intro'}
+          clipsOnly={raids[0].presentation === 'manual-clips'}
           onComplete={removeRaid}
         />
       )}

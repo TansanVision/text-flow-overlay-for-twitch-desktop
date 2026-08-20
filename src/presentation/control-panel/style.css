@@ -208,25 +208,32 @@ body.control-panel-page #root {
 }
 
 .manual-raid-card {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: center;
   margin-top: 12px;
-  padding: 12px;
+  padding: 16px 52px 16px 16px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
 }
 
-.manual-raid-card img {
+.manual-raid-user {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.manual-raid-user img {
   width: 56px;
   height: 56px;
   border-radius: 50%;
   object-fit: cover;
 }
 
-.manual-raid-card div {
+.manual-raid-user-info {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -235,6 +242,32 @@ body.control-panel-page #root {
 
 .manual-raid-card small {
   color: #bbb2c8;
+}
+
+.manual-raid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manual-raid-status {
+  align-self: center;
+  color: #bbb2c8;
+  font-size: 13px;
+}
+
+.manual-raid-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ddd7e5;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .authorization {

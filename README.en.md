@@ -16,7 +16,7 @@ No Streamer.bot setup or installer is required. Extract the ZIP, launch the exec
 - Register your own images as custom stamps
 - Choose from standard fonts or add custom fonts
 - Introduce raiders with their name, profile image, and clips
-- Switch between automatic and manual Raid introductions
+- Switch between automatic Raid introductions and per-raider manual clip/shoutout controls
 - Send a shoutout to the raider
 - Record users who interact through chat, Bits, subscriptions, gifts, or Raids
 - Switch the interface between Japanese and English
@@ -47,6 +47,8 @@ WebView2 Runtime is already installed on many Windows 10 and Windows 11 systems.
 
 On first launch, the app creates `portable-data` beside the executable. When updating, keep `portable-data` and replace the executable with the new version.
 
+Only one app instance can run at a time. If you launch the executable again, the new process exits and brings the existing control panel to the foreground.
+
 ## Adding the overlay to OBS
 
 1. Add a **Window Capture** source in OBS.
@@ -60,6 +62,20 @@ On first launch, the app creates `portable-data` beside the executable. When upd
 Moving the overlay offscreen changes only its desktop coordinates; it does not close the window. OBS can therefore continue capturing the same window.
 
 Twitch clips always play muted to provide reliable autoplay behavior.
+
+## Raid introductions
+
+The intro duration, clip playback, clip count, and shoutout option are shared settings for both modes.
+
+- Automatic mode runs intro → clips → shoutout in order, according to the saved settings.
+- Manual mode shows a separate action card for each raider after the intro.
+- A manual card lets you play clips and send the shoutout in either order.
+- The card closes automatically after all enabled actions finish.
+- Select the `×` button to close the card when you want to skip one or both actions.
+
+To respect Twitch limits, shoutouts are tracked with a two-minute channel cooldown and a 60-minute cooldown for the same target. Manual cards show the remaining wait time and do not call the API during a known cooldown.
+
+See [Raid introductions](docs/raid-intro.en.md) for detailed behavior.
 
 ## Comment commands
 
@@ -256,7 +272,7 @@ Upload the generated ZIP—not the executable by itself—to GitHub Releases. Se
 
 ## Related documentation
 
-- [Raid introduction](docs/raid-intro.md) — Japanese
+- [Raid introductions](docs/raid-intro.en.md)
 - [Persistent Twitch login](docs/twitch-token-refresh.md) — Japanese
 - [Custom stamps](docs/custom-stamps.md) — Japanese
 - [Custom fonts](docs/custom-fonts.md) — Japanese
