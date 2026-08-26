@@ -144,6 +144,10 @@ pub fn run() {
             .shadow(false)
             .resizable(false)
             .skip_taskbar(true)
+            .additional_browser_args(
+                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+                --autoplay-policy=no-user-gesture-required"
+            )
             .build()?;
             overlay.set_ignore_cursor_events(true)?;
 

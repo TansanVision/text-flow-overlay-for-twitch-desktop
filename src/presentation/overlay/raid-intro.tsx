@@ -180,10 +180,12 @@ export function RaidIntro({
           <span>{clip.title}</span>
         </header>
         <iframe
-          key={clip.id}
+          key={`${raid.id}-${clip.id}-${phase}`}
           src={source}
           title={`${raid.displayName}: ${clip.title}`}
           allow="autoplay; fullscreen"
+          height="360"
+          width="640"
           allowFullScreen
         />
       </aside>

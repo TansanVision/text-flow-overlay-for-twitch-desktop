@@ -321,9 +321,9 @@ body.overlay-page #root,
   top: 50%;
   left: 1vw;
   z-index: 1000;
-  width: 40vw;
+  width: 46vw;
   min-width: 400px;
-  height: 70vh;
+  height: 74vh;
   overflow: hidden;
   border: 1px solid rgba(177, 119, 255, 0.7);
   border-radius: 12px;
