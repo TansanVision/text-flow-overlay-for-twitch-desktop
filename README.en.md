@@ -63,6 +63,10 @@ Moving the overlay offscreen changes only its desktop coordinates; it does not c
 
 Twitch clips always play muted to provide reliable autoplay behavior.
 
+![obs settings2](docs/images/obs-settings2.png)
+
+If the overlay is completely dark and nothing shows up, it might work if you set the capture method to \\[Windows 10 (1903 or later)\\].
+
 ## Raid introductions
 
 The intro duration, clip playback, clip count, and shoutout option are shared settings for both modes.
