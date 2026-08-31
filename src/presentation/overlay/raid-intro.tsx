@@ -184,8 +184,8 @@ export function RaidIntro({
           src={source}
           title={`${raid.displayName}: ${clip.title}`}
           allow="autoplay; fullscreen"
-          height="360"
-          width="640"
+          height="540"
+          width="800"
           allowFullScreen
         />
       </aside>
