@@ -1,12 +1,14 @@
-# Twitch Text Flow Overlay
+# Text Flow Overlay for Twitch
 
 [日本語](README.md) | [English](README.en.md)
 
 A Windows desktop application that displays Twitch chat messages, emotes, custom stamps, effects, and Raid introductions in OBS.
 
+This is an unofficial third-party app and is not provided or endorsed by Twitch Interactive, Inc.
+
 No Streamer.bot setup or installer is required. Extract the ZIP, launch the executable, and connect your Twitch account.
 
-![Control panel and overlay](docs/images/app-overview.png)
+![Control panel and overlay](docs/images/app-overview-en.png)
 
 ## Features
 
@@ -18,6 +20,8 @@ No Streamer.bot setup or installer is required. Extract the ZIP, launch the exec
 - Introduce raiders with their name, profile image, and clips
 - Switch between automatic Raid introductions and per-raider manual clip/shoutout controls
 - Send a shoutout to the raider
+- Start commercials through the official Twitch API
+- Open Creator Dashboard in a browser
 - Record users who interact through chat, Bits, subscriptions, gifts, or Raids
 - Switch the interface between Japanese and English
 - Move the overlay offscreen without interrupting OBS capture
@@ -36,14 +40,14 @@ WebView2 Runtime is already installed on many Windows 10 and Windows 11 systems.
 
 ## Using the portable build
 
-1. Download `Twitch-Text-Flow-Overlay-*-windows-portable.zip` from GitHub Releases.
+1. Download `Text-Flow-Overlay-for-Twitch-*-windows-portable.zip` from GitHub Releases.
 2. Extract the ZIP into a writable folder.
-3. Run `Twitch Text Flow Overlay.exe`.
+3. Run `Text Flow Overlay for Twitch.exe`.
 4. Select **Connect to Twitch** in the control panel and complete authorization.
 5. Configure and save the comment, effect, and Raid settings you need.
 6. Add the overlay window to OBS.
 
-![Initial control panel setup after connecting to Twitch](docs/images/control-panel-setup.png)
+![Initial control panel setup after connecting to Twitch](docs/images/control-panel-setup-en.png)
 
 On first launch, the app creates `portable-data` beside the executable. When updating, keep `portable-data` and replace the executable with the new version.
 
@@ -52,7 +56,7 @@ Only one app instance can run at a time. If you launch the executable again, the
 ## Adding the overlay to OBS
 
 1. Add a **Window Capture** source in OBS.
-2. Select the `Twitch Text Flow Overlay` window.
+2. Select the `Text Flow Overlay for Twitch` window.
 3. Adjust its transform or crop settings as needed.
 4. Use the overlay tests in the control panel to check comments and the Raid introduction.
 5. During a stream, use **Move offscreen** in the control panel.
@@ -80,6 +84,14 @@ The intro duration, clip playback, clip count, and shoutout option are shared se
 To respect Twitch limits, shoutouts are tracked with a two-minute channel cooldown and a 60-minute cooldown for the same target. Manual cards show the remaining wait time and do not call the API during a known cooldown.
 
 See [Raid introductions](docs/raid-intro.en.md) for detailed behavior.
+
+## Twitch operations
+
+The control panel can request 30, 60, 90, or 180-second commercials. The channel must be live and enrolled as an Affiliate or Partner. The first use after updating may require reconnecting to Twitch to grant the additional permission.
+
+Select **Open Creator Dashboard** to open the connected channel's Creator Dashboard in your normal browser. The app does not inspect or operate anything inside Dashboard.
+
+See [Twitch operations](docs/twitch-operations.en.md) for setup and limitations.
 
 ## Comment commands
 
@@ -180,7 +192,7 @@ big pink Line one U+2003 Line two
 
 Select **Open image folder** in the control panel to open `portable-data/custom-stamps`, then add PNG, JPEG, GIF, or WebP files. Reload the images, choose a command name, image, and display mode, and save the settings.
 
-![Custom stamp settings](docs/images/custom-stamp-settings.png)
+![Custom stamp settings](docs/images/custom-stamp-settings-en.png)
 
 See [Custom stamps](docs/custom-stamps.md) for more information. This linked document is currently written in Japanese.
 
@@ -188,7 +200,7 @@ See [Custom stamps](docs/custom-stamps.md) for more information. This linked doc
 
 Select **Open font folder** in the control panel to open `portable-data/fonts`, then add TTF, OTF, WOFF, or WOFF2 files. Select **Reload fonts** to add them to the **Custom fonts** group in the same font dropdown as the standard fonts.
 
-![Custom font settings](docs/images/custom-font-settings.png)
+![Custom font settings](docs/images/custom-font-settings-en.png)
 
 Check each font's redistribution license before distributing it with the app. See [Custom fonts](docs/custom-fonts.md) for more information. This linked document is currently written in Japanese.
 
@@ -268,8 +280,8 @@ npm run tauri:portable
 Outputs are written to:
 
 ```text
-release/portable/Twitch Text Flow Overlay/
-release/Twitch-Text-Flow-Overlay-v<version>-windows-portable.zip
+release/portable/Text Flow Overlay for Twitch/
+release/Text-Flow-Overlay-for-Twitch-v<version>-windows-portable.zip
 ```
 
 Upload the generated ZIP—not the executable by itself—to GitHub Releases. See [Windows portable build](docs/portable-build.md) for details. This linked document is currently written in Japanese.
@@ -277,6 +289,7 @@ Upload the generated ZIP—not the executable by itself—to GitHub Releases. Se
 ## Related documentation
 
 - [Raid introductions](docs/raid-intro.en.md)
+- [Twitch operations](docs/twitch-operations.en.md)
 - [Persistent Twitch login](docs/twitch-token-refresh.md) — Japanese
 - [Custom stamps](docs/custom-stamps.md) — Japanese
 - [Custom fonts](docs/custom-fonts.md) — Japanese

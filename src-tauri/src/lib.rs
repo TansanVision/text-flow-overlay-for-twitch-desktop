@@ -84,6 +84,7 @@ pub fn run() {
             twitch_auth::restore_twitch_authorization,
             twitch_auth::logout_twitch,
             twitch_auth::send_twitch_shoutout,
+            twitch_auth::start_twitch_commercial,
             overlay_settings::get_overlay_settings,
             overlay_settings::save_overlay_settings,
             custom_stamps::get_custom_stamps,
@@ -121,7 +122,7 @@ pub fn run() {
                 "control-panel",
                 WebviewUrl::App(format!("index.html?port={port}").into()),
             )
-            .title("Twitch Text Flow Overlay Desktop")
+            .title("Text Flow Overlay for Twitch — Control Panel")
             .inner_size(1000.0, 700.0)
             .min_inner_size(720.0, 480.0)
             .build()?;
@@ -135,7 +136,7 @@ pub fn run() {
                         .expect("failed to build the localhost overlay URL"),
                 ),
             )
-            .title("Twitch Text Flow Overlay")
+            .title("Text Flow Overlay for Twitch")
             .inner_size(1280.0, 720.0)
             .fullscreen(false)
             .maximized(false)
@@ -144,10 +145,6 @@ pub fn run() {
             .shadow(false)
             .resizable(false)
             .skip_taskbar(true)
-            .additional_browser_args(
-                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
-                --autoplay-policy=no-user-gesture-required"
-            )
             .build()?;
             overlay.set_ignore_cursor_events(true)?;
 

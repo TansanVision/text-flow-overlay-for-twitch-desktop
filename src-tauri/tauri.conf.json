@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Twitch Text Flow Overlay",
+  "productName": "Text Flow Overlay for Twitch",
   "version": "0.1.0",
-  "identifier": "vision.tansan.twitch-text-flow-overlay",
+  "identifier": "vision.tansan.text-flow-overlay-for-twitch",
   "build": {
     "frontendDist": "../dist/renderer",
     "beforeDevCommand": "npm run build:renderer",

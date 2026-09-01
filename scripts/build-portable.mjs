@@ -9,14 +9,19 @@ if (process.platform !== 'win32') {
 const projectRoot = process.cwd();
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
 const version = packageJson.version;
-const executableName = 'twitch-text-flow-overlay.exe';
+const executableName = 'text-flow-overlay-for-twitch.exe';
 const builtExecutable = path.join(projectRoot, 'src-tauri', 'target', 'release', executableName);
-const portableDirectory = path.join(projectRoot, 'release', 'portable', 'Twitch Text Flow Overlay');
-const portableExecutable = path.join(portableDirectory, 'Twitch Text Flow Overlay.exe');
+const portableDirectory = path.join(
+  projectRoot,
+  'release',
+  'portable',
+  'Text Flow Overlay for Twitch',
+);
+const portableExecutable = path.join(portableDirectory, 'Text Flow Overlay for Twitch.exe');
 const zipPath = path.join(
   projectRoot,
   'release',
-  `Twitch-Text-Flow-Overlay-v${version}-windows-portable.zip`,
+  `Text-Flow-Overlay-for-Twitch-v${version}-windows-portable.zip`,
 );
 
 await run(process.execPath, ['scripts/run-tauri.mjs', 'build', '--no-bundle']);
@@ -27,9 +32,11 @@ await copyFile(builtExecutable, portableExecutable);
 await writeFile(
   path.join(portableDirectory, 'README.txt'),
   [
-    'Twitch Text Flow Overlay ポータブル版',
+    'Text Flow Overlay for Twitch ポータブル版',
     '',
-    '「Twitch Text Flow Overlay.exe」を実行してください。',
+    '非公式のサードパーティ製アプリです。Twitch Interactive, Inc.の提供・承認を受けたものではありません。',
+    '',
+    '「Text Flow Overlay for Twitch.exe」を実行してください。',
     '初回起動時に、このexeと同じ場所へ portable-data フォルダが作成されます。',
     '認証情報、設定、カスタムスタンプ、反応ユーザー一覧はその中に保存されます。',
     '',

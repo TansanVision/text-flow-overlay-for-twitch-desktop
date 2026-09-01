@@ -10,7 +10,7 @@ export function createControlPanelWindow(origin: string): BrowserWindow {
     height: 700,
     minWidth: 720,
     minHeight: 480,
-    title: 'Twitch Text Flow Overlay Desktop',
+    title: 'Text Flow Overlay for Twitch — Control Panel',
     backgroundColor: '#15171d',
     webPreferences: {
       preload: path.join(currentDirectory, 'preload.js'),

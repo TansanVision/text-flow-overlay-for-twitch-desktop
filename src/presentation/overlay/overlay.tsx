@@ -360,7 +360,7 @@ export function Overlay(): React.JSX.Element {
   }, []);
 
   return (
-    <main className="overlay" aria-label="Twitch Text Flow Overlay">
+    <main className="overlay" aria-label="Text Flow Overlay for Twitch">
       {raids[0] && (
         <RaidIntro
           key={`${raids[0].presentation ?? 'raid'}-${raids[0].id}`}

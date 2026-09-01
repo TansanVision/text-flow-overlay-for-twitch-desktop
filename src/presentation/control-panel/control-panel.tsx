@@ -95,6 +95,7 @@ type ManualRaid = {
 type ShoutoutResult = { success: boolean; error?: string; raiderUserId?: string };
 type RaidPhaseStatus = { raidId: string; phase: string };
 type RuntimeInfo = { operatingSystem: string; architecture: string };
+type CommercialResult = { length: number; message: string; retryAfter: number };
 
 const SHOUTOUT_COOLDOWN_MS = 2 * 60 * 1000;
 const SHOUTOUT_TARGET_COOLDOWN_MS = 60 * 60 * 1000;
@@ -158,7 +159,16 @@ export function ControlPanel(): React.JSX.Element {
   }>({ globalUntil: 0, targets: {} });
   const [raidPhaseStatus, setRaidPhaseStatus] = useState<RaidPhaseStatus>();
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo>();
+  const [commercialInProgress, setCommercialInProgress] = useState<number>();
+  const [commercialResult, setCommercialResult] = useState<CommercialResult>();
+  const [commercialError, setCommercialError] = useState<string>();
+  const [commercialCooldownUntil, setCommercialCooldownUntil] = useState(0);
+  const [commercialClock, setCommercialClock] = useState(() => Date.now());
   const port = new URLSearchParams(window.location.search).get('port') ?? window.location.port;
+  const commercialCooldownSeconds = Math.max(
+    Math.ceil((commercialCooldownUntil - commercialClock) / 1000),
+    0,
+  );
 
   const registerSuccessfulShoutout = useCallback((raiderUserId?: string) => {
     const sentAt = Date.now();
@@ -285,6 +295,12 @@ export function ControlPanel(): React.JSX.Element {
     });
     return () => void unlisten.then((dispose) => dispose());
   }, []);
+
+  useEffect(() => {
+    if (commercialCooldownUntil <= Date.now()) return;
+    const timer = window.setInterval(() => setCommercialClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [commercialCooldownUntil]);
 
   useEffect(() => {
     void invoke<RuntimeInfo>('get_runtime_info')
@@ -425,6 +441,35 @@ export function ControlPanel(): React.JSX.Element {
       setError(undefined);
     } catch (reason) {
       setError(String(reason));
+    }
+  };
+
+  const startCommercial = async (length: number) => {
+    setCommercialInProgress(length);
+    setCommercialError(undefined);
+    setCommercialResult(undefined);
+    try {
+      const result = await invoke<CommercialResult>('start_twitch_commercial', { length });
+      const now = Date.now();
+      setCommercialResult(result);
+      setCommercialClock(now);
+      setCommercialCooldownUntil(now + result.retryAfter * 1000);
+    } catch (reason) {
+      setCommercialError(String(reason));
+    } finally {
+      setCommercialInProgress(undefined);
+    }
+  };
+
+  const openTwitchDashboard = async () => {
+    try {
+      const dashboardUrl = connectedUser
+        ? `https://dashboard.twitch.tv/u/${encodeURIComponent(connectedUser.login)}/stream-manager`
+        : 'https://dashboard.twitch.tv/';
+      await openUrl(dashboardUrl);
+      setCommercialError(undefined);
+    } catch (reason) {
+      setCommercialError(String(reason));
     }
   };
 
@@ -652,7 +697,8 @@ export function ControlPanel(): React.JSX.Element {
       <header>
         <div>
           <p className="eyebrow">Desktop control panel</p>
-          <h1>Twitch Text Flow Overlay</h1>
+          <h1>Text Flow Overlay for Twitch</h1>
+          <p className="unofficial-notice">{t('unofficialNotice')}</p>
         </div>
         <label className="language-selector">
           <span>{t('language')}</span>
@@ -700,6 +746,55 @@ export function ControlPanel(): React.JSX.Element {
           </div>
         )}
         {error && <p className="error">{error}</p>}
+      </section>
+
+      <section className="panel" aria-labelledby="twitch-operations-title">
+        <h2 id="twitch-operations-title">{t('twitchOperations')}</h2>
+        <div className="twitch-operation-block">
+          <h3>{t('commercial')}</h3>
+          <p className="help-text">{t('commercialHelp')}</p>
+          <div className="button-row commercial-buttons">
+            {[30, 60, 90, 180].map((length) => (
+              <button
+                type="button"
+                key={length}
+                onClick={() => void startCommercial(length)}
+                disabled={
+                  !connectedUser ||
+                  commercialInProgress !== undefined ||
+                  commercialCooldownSeconds > 0
+                }
+              >
+                {commercialInProgress === length
+                  ? t('startingCommercial')
+                  : t('startCommercial', { seconds: length })}
+              </button>
+            ))}
+          </div>
+          {!connectedUser && <p className="help-text">{t('commercialLoginRequired')}</p>}
+          {commercialCooldownSeconds > 0 && (
+            <p className="connection-status" role="status">
+              {t('commercialCooldown', { seconds: commercialCooldownSeconds })}
+            </p>
+          )}
+          {commercialResult && (
+            <p className="success" role="status">
+              {t('commercialStarted', {
+                seconds: commercialResult.length,
+                retryAfter: commercialResult.retryAfter,
+              })}
+            </p>
+          )}
+        </div>
+
+        <div className="twitch-operation-block">
+          <div className="button-row">
+            <button type="button" onClick={openTwitchDashboard}>
+              {t('openCreatorDashboard')}
+            </button>
+          </div>
+        </div>
+        {commercialError && <p className="error">{commercialError}</p>}
       </section>
 
       <section className="panel" aria-labelledby="external-emotes-title">

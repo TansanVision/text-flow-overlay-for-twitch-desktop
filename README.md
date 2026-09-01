@@ -1,12 +1,14 @@
-# Twitch Text Flow Overlay
+# Text Flow Overlay for Twitch
 
 [日本語](README.md) | [English](README.en.md)
 
 Twitchチャットのコメント、エモート、カスタムスタンプ、エフェクト、Raid紹介をOBSへ表示するWindows向けデスクトップアプリです。
 
+本アプリは非公式のサードパーティ製アプリであり、Twitch Interactive, Inc.の提供・承認を受けたものではありません。
+
 Streamer.botやインストーラーは必要ありません。ZIPを展開してEXEを起動し、Twitchへ接続すると使用できます。
 
-![コンパネとオーバーレイの画面](docs/images/app-overview.png)
+![コンパネとオーバーレイの画面](docs/images/app-overview-ja.png)
 
 ## できること
 
@@ -18,6 +20,8 @@ Streamer.botやインストーラーは必要ありません。ZIPを展開し�
 - Raidしてくれた配信者の名前、画像、クリップを紹介する
 - 自動紹介と、レイダーごとにクリップ・シャウトアウトを選べる手動紹介を切り替える
 - Raidしてくれた配信者をシャウトアウトする
+- Twitch公式APIから広告を開始する
+- Creator Dashboardをブラウザーで開く
 - コメント、Bits、サブスク、ギフト、Raidへ反応したユーザーを記録する
 - 日本語と英語を切り替える
 - OBSでのキャプチャを維持したままオーバーレイを画面外へ移動する
@@ -36,14 +40,14 @@ Windows 10・11の多くの環境にはWebView2 Runtimeが導入済みです。�
 
 ## ポータブル版の使い方
 
-1. GitHub Releasesから`Twitch-Text-Flow-Overlay-*-windows-portable.zip`をダウンロードする
+1. GitHub Releasesから`Text-Flow-Overlay-for-Twitch-*-windows-portable.zip`をダウンロードする
 2. ZIPを任意の書き込み可能なフォルダへ展開する
-3. `Twitch Text Flow Overlay.exe`を実行する
+3. `Text Flow Overlay for Twitch.exe`を実行する
 4. コンパネの「Twitchに接続」から認証する
 5. コメント、エフェクト、Raidなどを設定して保存する
 6. OBSへオーバーレイウィンドウを追加する
 
-![Twitch接続後のコンパネ初期設定](docs/images/control-panel-setup.png)
+![Twitch接続後のコンパネ初期設定](docs/images/control-panel-setup-ja.png)
 
 初回起動時にEXEと同じ場所へ`portable-data`が作成されます。更新時は`portable-data`を残し、EXEを新しいバージョンへ差し替えてください。
 
@@ -52,7 +56,7 @@ Windows 10・11の多くの環境にはWebView2 Runtimeが導入済みです。�
 ## OBSへの追加
 
 1. OBSのソースで「ウィンドウキャプチャ」を追加する
-2. ウィンドウから`Twitch Text Flow Overlay`を選択する
+2. ウィンドウから`Text Flow Overlay for Twitch`を選択する
 3. 必要に応じて変換やクロップでサイズを調整する
 4. コンパネのオーバーレイテストでコメントやRaidイントロを確認する
 5. 配信時はコンパネの「画面外へ移動」を使用する
@@ -80,6 +84,14 @@ Raid紹介では、イントロ時間、クリップ再生、本数、シャウ�
 Twitchの制限に合わせ、シャウトアウトは全体で2分間隔、同じ相手には60分間隔で管理されます。手動カードでは待機中の残り秒数を表示し、制限中のAPI呼び出しを防ぎます。
 
 詳しい動作は[Raid紹介](docs/raid-intro.md)を参照してください。
+
+## Twitch操作
+
+コンパネから30、60、90、180秒の広告を開始できます。配信中のアフィリエイトまたはパートナー向け機能で、初回利用時は追加権限のためTwitchへの再接続が必要になる場合があります。
+
+「Creator Dashboardを開く」ボタンを押すと、通常のブラウザーで接続中のチャンネルのCreator Dashboardを開きます。アプリからDashboard内の操作や状態取得は行いません。
+
+設定方法と制約は[Twitch操作](docs/twitch-operations.md)を参照してください。
 
 ## コメントコマンド
 
@@ -180,7 +192,7 @@ big pink 1行目 U+2003 2行目
 
 コンパネの「画像フォルダを開く」から`portable-data/custom-stamps`を開き、PNG、JPEG、GIF、WebPを配置します。画像を再読み込みした後、コマンド名、画像、表示方式を設定して保存してください。
 
-![カスタムスタンプ設定画面](docs/images/custom-stamp-settings.png)
+![カスタムスタンプ設定画面](docs/images/custom-stamp-settings-ja.png)
 
 詳細は[カスタムスタンプ](docs/custom-stamps.md)を参照してください。
 
@@ -188,7 +200,7 @@ big pink 1行目 U+2003 2行目
 
 コンパネの「フォントフォルダを開く」から`portable-data/fonts`を開き、TTF、OTF、WOFF、WOFF2を配置します。「フォント一覧を再読み込み」を押すと、標準フォントと同じドロップダウンの「カスタムフォント」へ追加されます。
 
-![カスタムフォント設定画面](docs/images/custom-font-settings.png)
+![カスタムフォント設定画面](docs/images/custom-font-settings-ja.png)
 
 フォントをアプリと一緒に配布する場合は、各フォントの再配布ライセンスを確認してください。詳細は[カスタムフォント](docs/custom-fonts.md)を参照してください。
 
@@ -270,8 +282,8 @@ npm run tauri:portable
 生成物は次の場所へ出力されます。
 
 ```text
-release/portable/Twitch Text Flow Overlay/
-release/Twitch-Text-Flow-Overlay-v<version>-windows-portable.zip
+release/portable/Text Flow Overlay for Twitch/
+release/Text-Flow-Overlay-for-Twitch-v<version>-windows-portable.zip
 ```
 
 GitHub ReleasesにはEXE単体ではなく、生成されたZIPを登録してください。詳細は[Windowsポータブル版](docs/portable-build.md)を参照してください。
@@ -279,6 +291,7 @@ GitHub ReleasesにはEXE単体ではなく、生成されたZIPを登録して�
 ## 関連ドキュメント
 
 - [Raid紹介](docs/raid-intro.md)
+- [Twitch操作](docs/twitch-operations.md)
 - [Twitchログインの継続](docs/twitch-token-refresh.md)
 - [カスタムスタンプ](docs/custom-stamps.md)
 - [カスタムフォント](docs/custom-fonts.md)

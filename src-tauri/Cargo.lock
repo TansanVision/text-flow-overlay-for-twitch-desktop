@@ -4202,6 +4202,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "text-flow-overlay-for-twitch"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "futures-util",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-localhost",
+ "tauri-plugin-log",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4616,27 +4637,6 @@ dependencies = [
  "sha1",
  "thiserror 2.0.20",
  "utf-8",
-]
-
-[[package]]
-name = "twitch-text-flow-overlay"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "futures-util",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-localhost",
- "tauri-plugin-log",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]

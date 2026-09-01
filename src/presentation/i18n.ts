@@ -14,6 +14,18 @@ const ja = {
   openAuth: '認証ページを開く',
   connected: '接続済み: {{name}}',
   logout: 'ログアウト',
+  unofficialNotice:
+    '非公式のサードパーティ製アプリです。Twitch Interactive, Inc.の提供・承認を受けたものではありません。',
+  twitchOperations: 'Twitch操作',
+  commercial: '広告を開始',
+  commercialHelp:
+    'Twitch公式APIで広告を開始します。配信中のアフィリエイトまたはパートナーのチャンネルで利用できます。実際の広告時間はTwitch側で変わる場合があります。',
+  commercialLoginRequired: '広告を開始するにはTwitchへ接続してください。',
+  startCommercial: '{{seconds}}秒広告',
+  startingCommercial: '開始中…',
+  commercialStarted: '{{seconds}}秒の広告を開始しました。次の実行まで{{retryAfter}}秒です。',
+  commercialCooldown: '次の広告まであと{{seconds}}秒',
+  openCreatorDashboard: 'Creator Dashboardを開く',
   externalEmotes: '外部エモート',
   loadFailed: '取得失敗 ({{error}})',
   items: '{{count}}件',
@@ -147,6 +159,19 @@ const en: Record<keyof typeof ja, string> = {
   openAuth: 'Open authorization page',
   connected: 'Connected: {{name}}',
   logout: 'Log out',
+  unofficialNotice:
+    'This is an unofficial third-party app and is not provided or endorsed by Twitch Interactive, Inc.',
+  twitchOperations: 'Twitch operations',
+  commercial: 'Start a commercial',
+  commercialHelp:
+    'Starts a commercial through the official Twitch API. The channel must be live and enrolled as an Affiliate or Partner. Twitch may adjust the actual commercial length.',
+  commercialLoginRequired: 'Connect to Twitch before starting a commercial.',
+  startCommercial: '{{seconds}}s commercial',
+  startingCommercial: 'Starting…',
+  commercialStarted:
+    'Started a {{seconds}}s commercial. The next commercial is available in {{retryAfter}}s.',
+  commercialCooldown: '{{seconds}}s until the next commercial',
+  openCreatorDashboard: 'Open Creator Dashboard',
   externalEmotes: 'External emotes',
   loadFailed: 'Failed ({{error}})',
   items: '{{count}}',

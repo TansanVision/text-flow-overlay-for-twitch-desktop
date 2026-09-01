@@ -8,7 +8,7 @@ export function createOverlayWindow(origin: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 1920,
     height: 1080,
-    title: 'Twitch Text Flow Overlay',
+    title: 'Text Flow Overlay for Twitch',
     transparent: true,
     frame: false,
     backgroundColor: '#00000000',

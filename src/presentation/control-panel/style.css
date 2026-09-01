@@ -57,6 +57,14 @@ body.control-panel-page #root {
   letter-spacing: -0.04em;
 }
 
+.unofficial-notice {
+  max-width: 34rem;
+  margin: 8px 0 0;
+  color: #9d97a7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .control-panel h2 {
   font-size: 18px;
 }
@@ -169,6 +177,21 @@ body.control-panel-page #root {
 }
 .control-panel .secondary-button {
   background: #484153;
+}
+
+.twitch-operation-block + .twitch-operation-block {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #34303f;
+}
+
+.twitch-operation-block h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.commercial-buttons {
+  flex-wrap: wrap;
 }
 
 .test-comment-row {

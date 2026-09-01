@@ -14,8 +14,10 @@ const DEVICE_URL: &str = "https://id.twitch.tv/oauth2/device";
 const TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
 const VALIDATE_URL: &str = "https://id.twitch.tv/oauth2/validate";
 const USERS_URL: &str = "https://api.twitch.tv/helix/users";
-const CHAT_SCOPES: &str =
-    "user:read:chat moderator:manage:shoutouts bits:read channel:read:subscriptions";
+const COMMERCIAL_URL: &str = "https://api.twitch.tv/helix/channels/commercial";
+const TWITCH_CLIENT_ID: &str = "jj36zzmydbz142ux14kpbsw5w747ta";
+const REQUIRED_SCOPES: &str = "user:read:chat moderator:manage:shoutouts bits:read \
+    channel:read:subscriptions channel:edit:commercial";
 
 pub struct TwitchAuthState {
     pending: Mutex<Option<PendingAuthorization>>,
@@ -85,6 +87,19 @@ struct OAuthError {
 }
 
 #[derive(Deserialize)]
+struct CommercialResponse {
+    data: Vec<CommercialResult>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialResult {
+    length: u16,
+    message: String,
+    retry_after: u64,
+}
+
+#[derive(Deserialize)]
 struct ValidatedToken {
     client_id: String,
     login: String,
@@ -150,7 +165,10 @@ pub async fn start_twitch_device_authorization(
 
     let response = reqwest::Client::new()
         .post(DEVICE_URL)
-        .form(&[("client_id", client_id.as_str()), ("scopes", CHAT_SCOPES)])
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("scopes", REQUIRED_SCOPES),
+        ])
         .send()
         .await
         .map_err(|error| format!("Twitchへの接続に失敗しました: {error}"))?;
@@ -197,7 +215,7 @@ pub async fn poll_twitch_device_authorization(
         .post(TOKEN_URL)
         .form(&[
             ("client_id", pending.client_id.as_str()),
-            ("scopes", CHAT_SCOPES),
+            ("scopes", REQUIRED_SCOPES),
             ("device_code", pending.device_code.as_str()),
             ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
         ])
@@ -359,7 +377,7 @@ async fn get_user_profile(access_token: &str, user_id: &str) -> Option<TwitchUse
         .get(USERS_URL)
         .query(&[("id", user_id)])
         .bearer_auth(access_token)
-        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .header("Client-Id", TWITCH_CLIENT_ID)
         .send()
         .await
         .ok()?
@@ -402,6 +420,66 @@ pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), Str
 }
 
 #[tauri::command]
+pub async fn start_twitch_commercial(
+    length: u16,
+    state: tauri::State<'_, TwitchAuthState>,
+) -> Result<CommercialResult, String> {
+    validate_commercial_length(length)?;
+    let access_token = state
+        .access_token
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Twitchに接続されていません".to_owned())?;
+    let broadcaster_id = state
+        .user_id
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "TwitchユーザーIDがありません".to_owned())?;
+
+    let response = reqwest::Client::new()
+        .post(COMMERCIAL_URL)
+        .bearer_auth(access_token)
+        .header("Client-Id", TWITCH_CLIENT_ID)
+        .json(&serde_json::json!({
+            "broadcaster_id": broadcaster_id,
+            "length": length,
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("広告を開始できませんでした: {error}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error = response.json::<OAuthError>().await.ok();
+        let message = error.and_then(|value| value.message).unwrap_or_default();
+        return Err(if message.is_empty() {
+            format!("広告を開始できませんでした ({status})")
+        } else {
+            format!("広告を開始できませんでした ({status}): {message}")
+        });
+    }
+
+    response
+        .json::<CommercialResponse>()
+        .await
+        .map_err(|error| format!("広告開始結果を読み取れませんでした: {error}"))?
+        .data
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Twitchから広告開始結果が返されませんでした".to_owned())
+}
+
+fn validate_commercial_length(length: u16) -> Result<(), String> {
+    if [30, 60, 90, 180].contains(&length) {
+        Ok(())
+    } else {
+        Err("広告時間は30、60、90、180秒から選択してください".to_owned())
+    }
+}
+
+#[tauri::command]
 pub async fn send_twitch_shoutout(
     app: AppHandle,
     raider_user_id: String,
@@ -429,7 +507,7 @@ pub async fn send_twitch_shoutout(
                 ("moderator_id", broadcaster_id.as_str()),
             ])
             .bearer_auth(access_token)
-            .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+            .header("Client-Id", TWITCH_CLIENT_ID)
             .send()
             .await
             .map_err(|error| format!("シャウトアウトに失敗しました: {error}"))?;
@@ -647,7 +725,7 @@ async fn refresh_access_token(
 }
 
 fn has_required_scopes(validated: &ValidatedToken) -> bool {
-    CHAT_SCOPES
+    REQUIRED_SCOPES
         .split_whitespace()
         .all(|scope| validated.scopes.iter().any(|value| value == scope))
 }
@@ -692,14 +770,21 @@ mod tests {
 
     #[test]
     fn checks_every_required_scope() {
-        let validated = ValidatedToken {
+        let mut validated = ValidatedToken {
             client_id: "client".into(),
             login: "login".into(),
             user_id: "user".into(),
-            scopes: CHAT_SCOPES.split_whitespace().map(str::to_owned).collect(),
+            scopes: REQUIRED_SCOPES
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect(),
             expires_in: 3600,
         };
         assert!(has_required_scopes(&validated));
+        validated
+            .scopes
+            .retain(|scope| scope != "channel:edit:commercial");
+        assert!(!has_required_scopes(&validated));
     }
 
     #[test]
@@ -709,5 +794,15 @@ mod tests {
             "シャウトアウト先のTwitchユーザーIDがありません"
         );
         assert!(validate_shoutout_target("123456").is_ok());
+    }
+
+    #[test]
+    fn accepts_only_twitch_commercial_lengths() {
+        for length in [30, 60, 90, 180] {
+            assert!(validate_commercial_length(length).is_ok());
+        }
+        for length in [0, 15, 120, 181] {
+            assert!(validate_commercial_length(length).is_err());
+        }
     }
 }

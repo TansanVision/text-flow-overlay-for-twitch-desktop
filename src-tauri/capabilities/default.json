@@ -11,6 +11,7 @@
     "allow-restore-twitch-authorization",
     "allow-logout-twitch",
     "allow-send-twitch-shoutout",
+    "allow-start-twitch-commercial",
     "allow-get-overlay-settings",
     "allow-save-overlay-settings",
     "allow-get-custom-stamps",
@@ -34,7 +35,10 @@
     "allow-emit-overlay-test",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://www.twitch.tv/activate*" }]
+      "allow": [
+        { "url": "https://www.twitch.tv/activate*" },
+        { "url": "https://dashboard.twitch.tv/*" }
+      ]
     }
   ]
 }

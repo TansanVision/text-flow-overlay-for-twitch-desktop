@@ -1,5 +1,5 @@
 [package]
-name = "twitch-text-flow-overlay"
+name = "text-flow-overlay-for-twitch"
 version = "0.1.0"
 description = "A desktop app that streams Twitch comments."
 authors = ["Tansan Vision"]

@@ -11,15 +11,15 @@ npm run tauri:portable
 生成先は次のとおり。
 
 ```text
-release/portable/Twitch Text Flow Overlay/
-├─ Twitch Text Flow Overlay.exe
+release/portable/Text Flow Overlay for Twitch/
+├─ Text Flow Overlay for Twitch.exe
 └─ README.txt
 ```
 
 GitHub Releasesへ登録するZIPも同時に生成される。ファイル名のバージョンには`package.json`の`version`が使用される。
 
 ```text
-release/Twitch-Text-Flow-Overlay-v1.0.0-windows-portable.zip
+release/Text-Flow-Overlay-for-Twitch-v1.0.0-windows-portable.zip
 ```
 
 GitHub Releasesにはフォルダ内のexe単体ではなく、このZIPを登録する。ZIPには`portable-data`は含まれない。
@@ -31,8 +31,8 @@ GitHub Releasesにはフォルダ内のexe単体ではなく、このZIPを登�
 初回起動時、exeと同じディレクトリへ`portable-data`が作成される。
 
 ```text
-Twitch Text Flow Overlay/
-├─ Twitch Text Flow Overlay.exe
+Text Flow Overlay for Twitch/
+├─ Text Flow Overlay for Twitch.exe
 ├─ README.txt
 └─ portable-data/
    ├─ auth/

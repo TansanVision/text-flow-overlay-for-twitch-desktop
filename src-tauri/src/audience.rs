@@ -130,7 +130,7 @@ mod tests {
             .expect("system clock should be after UNIX epoch")
             .as_nanos();
         let directory = std::env::temp_dir().join(format!(
-            "twitch-text-flow-overlay-audience-{}-{unique}",
+            "text-flow-overlay-for-twitch-audience-{}-{unique}",
             std::process::id()
         ));
         let state = AudienceState::new(directory.clone());
