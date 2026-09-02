@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use crate::twitch_chat;
+use crate::twitch_config::TWITCH_CLIENT_ID;
 
 const DEVICE_URL: &str = "https://id.twitch.tv/oauth2/device";
 const TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
 const VALIDATE_URL: &str = "https://id.twitch.tv/oauth2/validate";
 const USERS_URL: &str = "https://api.twitch.tv/helix/users";
 const COMMERCIAL_URL: &str = "https://api.twitch.tv/helix/channels/commercial";
-const TWITCH_CLIENT_ID: &str = "jj36zzmydbz142ux14kpbsw5w747ta";
 const REQUIRED_SCOPES: &str = "user:read:chat moderator:manage:shoutouts bits:read \
     channel:read:subscriptions channel:edit:commercial";
 
@@ -92,7 +92,7 @@ struct CommercialResponse {
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
 pub struct CommercialResult {
     length: u16,
     message: String,
@@ -155,13 +155,9 @@ pub enum RestoreResult {
 
 #[tauri::command]
 pub async fn start_twitch_device_authorization(
-    client_id: String,
     state: tauri::State<'_, TwitchAuthState>,
 ) -> Result<DeviceAuthorization, String> {
-    let client_id = client_id.trim().to_owned();
-    if client_id.is_empty() {
-        return Err("Client IDを入力してください。".into());
-    }
+    let client_id = TWITCH_CLIENT_ID.to_owned();
 
     let response = reqwest::Client::new()
         .post(DEVICE_URL)
@@ -296,9 +292,14 @@ pub async fn restore_twitch_authorization(
         return Ok(RestoreResult::Disconnected);
     }
 
-    let stored: StoredToken =
-        serde_json::from_slice(&fs::read(&state.token_path).map_err(|error| error.to_string())?)
-            .map_err(|error| format!("保存したTwitch認証情報を読み込めませんでした: {error}"))?;
+    let Some(stored) = parse_stored_token_for_current_client(
+        &fs::read(&state.token_path).map_err(|error| error.to_string())?,
+    )?
+    else {
+        // A different build must reauthorize before making any Twitch requests.
+        // Leave the old file untouched until the user signs in again.
+        return Ok(RestoreResult::Disconnected);
+    };
 
     let (access_token, refresh_token, validated, expires_in) =
         match validate_token(&stored.access_token).await {
@@ -450,25 +451,58 @@ pub async fn start_twitch_commercial(
         .await
         .map_err(|error| format!("広告を開始できませんでした: {error}"))?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let error = response.json::<OAuthError>().await.ok();
-        let message = error.and_then(|value| value.message).unwrap_or_default();
-        return Err(if message.is_empty() {
-            format!("広告を開始できませんでした ({status})")
+    let status = response.status();
+    let body = response.bytes().await.map_err(|error| {
+        if status.is_success() {
+            commercial_confirmation_error(&error.to_string())
         } else {
-            format!("広告を開始できませんでした ({status}): {message}")
-        });
+            format!("広告を開始できませんでした ({status}): {error}")
+        }
+    })?;
+    parse_commercial_response(status, &body)
+}
+
+fn commercial_confirmation_error(detail: &str) -> String {
+    format!("Twitchは広告開始要求を受け付けましたが、結果を確認できませんでした。広告が開始されている可能性があります。再実行する前にCreator Dashboardで確認してください: {detail}")
+}
+
+fn parse_commercial_response(
+    status: reqwest::StatusCode,
+    body: &[u8],
+) -> Result<CommercialResult, String> {
+    if !status.is_success() {
+        let value = serde_json::from_slice::<serde_json::Value>(body).ok();
+        let message = value
+            .as_ref()
+            .and_then(|value| {
+                value
+                    .get("message")
+                    .and_then(|message| message.as_str())
+                    .or_else(|| {
+                        value
+                            .pointer("/data/0/message")
+                            .and_then(|message| message.as_str())
+                    })
+            })
+            .unwrap_or_default();
+        let guidance = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            " Twitchの広告待機時間またはリクエスト制限中です。しばらく待ってから再実行してください。"
+        } else {
+            ""
+        };
+        return Err(
+            format!("広告を開始できませんでした ({status})。{guidance} {message}")
+                .trim()
+                .to_owned(),
+        );
     }
 
-    response
-        .json::<CommercialResponse>()
-        .await
-        .map_err(|error| format!("広告開始結果を読み取れませんでした: {error}"))?
+    serde_json::from_slice::<CommercialResponse>(body)
+        .map_err(|error| commercial_confirmation_error(&error.to_string()))?
         .data
         .into_iter()
         .next()
-        .ok_or_else(|| "Twitchから広告開始結果が返されませんでした".to_owned())
+        .ok_or_else(|| commercial_confirmation_error("Twitchから広告開始結果が返されませんでした"))
 }
 
 fn validate_commercial_length(length: u16) -> Result<(), String> {
@@ -644,9 +678,13 @@ async fn maintain_tokens(
             }
         };
         let validated = match validate_token(&refreshed.access_token).await {
-            Ok(validated) if has_required_scopes(&validated) => validated,
+            Ok(validated)
+                if has_required_scopes(&validated) && validated.client_id == client_id =>
+            {
+                validated
+            }
             Ok(_) => {
-                log::warn!("Refreshed Twitch token is missing required scopes");
+                log::warn!("Refreshed Twitch token has an unexpected Client ID or missing scopes");
                 return;
             }
             Err(error) => {
@@ -754,9 +792,46 @@ async fn validate_token(access_token: &str) -> Result<ValidatedToken, String> {
         .map_err(|error| format!("トークン検証結果を読み取れませんでした: {error}"))
 }
 
+fn parse_stored_token_for_current_client(bytes: &[u8]) -> Result<Option<StoredToken>, String> {
+    let stored: StoredToken = serde_json::from_slice(bytes)
+        .map_err(|error| format!("保存したTwitch認証情報を読み込めませんでした: {error}"))?;
+    Ok((stored.client_id == TWITCH_CLIENT_ID).then_some(stored))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restores_only_tokens_issued_for_the_compiled_client_id() {
+        for client_id in [
+            TWITCH_CLIENT_ID.to_owned(),
+            format!("{TWITCH_CLIENT_ID}other"),
+        ] {
+            let stored = serde_json::json!({
+                "clientId": client_id,
+                "accessToken": "test-access-token",
+                "refreshToken": "test-refresh-token"
+            });
+            let result =
+                parse_stored_token_for_current_client(&serde_json::to_vec(&stored).unwrap())
+                    .unwrap();
+            assert_eq!(result.is_some(), client_id == TWITCH_CLIENT_ID);
+        }
+    }
+
+    #[test]
+    fn retains_legacy_login_for_the_same_client_and_reports_corrupt_data() {
+        let legacy = serde_json::json!({
+            "clientId": TWITCH_CLIENT_ID,
+            "accessToken": "test-access-token"
+        });
+        let stored = parse_stored_token_for_current_client(&serde_json::to_vec(&legacy).unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(stored.refresh_token.is_none());
+        assert!(parse_stored_token_for_current_client(b"not-json").is_err());
+    }
 
     #[test]
     fn reads_legacy_stored_token_without_refresh_token() {
@@ -803,6 +878,53 @@ mod tests {
         }
         for length in [0, 15, 120, 181] {
             assert!(validate_commercial_length(length).is_err());
+        }
+    }
+
+    #[test]
+    fn reads_twitch_commercial_response_and_preserves_frontend_names() {
+        let result = parse_commercial_response(
+            reqwest::StatusCode::OK,
+            br#"{"data":[{"length":60,"message":"","retry_after":480}]}"#,
+        )
+        .unwrap();
+        assert_eq!(result.length, 60);
+        assert_eq!(result.retry_after, 480);
+        assert_eq!(
+            serde_json::to_value(result).unwrap(),
+            serde_json::json!({"length":60,"message":"","retryAfter":480})
+        );
+    }
+
+    #[test]
+    fn does_not_report_a_successful_but_unreadable_commercial_as_rejected() {
+        for body in [
+            r#"{"data":[]}"#,
+            r#"{"data":[{"length":60,"message":""}]}"#,
+            "invalid",
+        ] {
+            let error = parse_commercial_response(reqwest::StatusCode::OK, body.as_bytes())
+                .err()
+                .unwrap();
+            assert!(error.contains("受け付けました"));
+            assert!(error.contains("Creator Dashboard"));
+            assert!(!error.contains("広告を開始できませんでした"));
+        }
+    }
+
+    #[test]
+    fn explains_commercial_rate_limits_and_keeps_twitch_details() {
+        for body in [
+            r#"{"message":"cooldown active"}"#,
+            r#"{"data":[{"message":"cooldown active"}]}"#,
+        ] {
+            let error =
+                parse_commercial_response(reqwest::StatusCode::TOO_MANY_REQUESTS, body.as_bytes())
+                    .err()
+                    .unwrap();
+            assert!(error.contains("429"));
+            assert!(error.contains("しばらく待って"));
+            assert!(error.contains("cooldown active"));
         }
     }
 }

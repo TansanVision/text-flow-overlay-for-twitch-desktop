@@ -3,6 +3,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Language } from '../i18n';
+import { useRaidClipPlayback } from './use-raid-clip-playback';
 
 export type Raid = {
   id: string;
@@ -125,21 +126,22 @@ export function RaidIntro({
     return () => window.clearTimeout(timer);
   }, [finishIntro, phase, remaining]);
 
+  const advanceClip = useCallback(() => {
+    if (clipIndex + 1 < clips.length) setClipIndex(clipIndex + 1);
+    else completeClipPlayback();
+  }, [clipIndex, clips.length, completeClipPlayback]);
+
+  useRaidClipPlayback(
+    raid.id,
+    raid.displayName,
+    phase === 'clips' ? clips[clipIndex] : undefined,
+    clipIndex + 1,
+    clips.length,
+    advanceClip,
+  );
+
   useEffect(() => {
-    if (phase !== 'clips') return;
-    const clip = clips[clipIndex];
-    if (!clip) {
-      completeClipPlayback();
-      return;
-    }
-    const timer = window.setTimeout(
-      () => {
-        if (clipIndex + 1 < clips.length) setClipIndex((current) => current + 1);
-        else completeClipPlayback();
-      },
-      Math.max(clip.duration || 30, 1) * 1000,
-    );
-    return () => window.clearTimeout(timer);
+    if (phase === 'clips' && !clips[clipIndex]) completeClipPlayback();
   }, [clipIndex, clips, completeClipPlayback, phase]);
 
   useEffect(() => {

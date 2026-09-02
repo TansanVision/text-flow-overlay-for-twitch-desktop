@@ -9,8 +9,10 @@ mod custom_fonts;
 mod custom_stamps;
 mod external_emotes;
 mod overlay_settings;
+mod raid_clip_playback;
 mod twitch_auth;
 mod twitch_chat;
+mod twitch_config;
 
 struct OverlayWindowPositionState {
     previous_position: Mutex<Option<PhysicalPosition<i32>>>,
@@ -72,6 +74,7 @@ pub fn run() {
         .manage(settings)
         .manage(custom_stamps)
         .manage(custom_fonts)
+        .manage(raid_clip_playback::RaidClipPlaybackState::default())
         .manage(audience::AudienceState::new(
             data_directory.join("audience"),
         ))
@@ -85,6 +88,9 @@ pub fn run() {
             twitch_auth::logout_twitch,
             twitch_auth::send_twitch_shoutout,
             twitch_auth::start_twitch_commercial,
+            raid_clip_playback::get_raid_clip_playback,
+            raid_clip_playback::set_raid_clip_playback,
+            raid_clip_playback::skip_raid_clip,
             overlay_settings::get_overlay_settings,
             overlay_settings::save_overlay_settings,
             custom_stamps::get_custom_stamps,

@@ -12,6 +12,7 @@ import {
   installCustomFonts,
 } from '../comment-font';
 import type { Language } from '../i18n';
+import { ClipPlaybackControls } from './clip-playback-controls';
 import './style.css';
 
 type DeviceAuthorization = {
@@ -100,8 +101,6 @@ type CommercialResult = { length: number; message: string; retryAfter: number };
 const SHOUTOUT_COOLDOWN_MS = 2 * 60 * 1000;
 const SHOUTOUT_TARGET_COOLDOWN_MS = 60 * 60 * 1000;
 
-const TWITCH_CLIENT_ID = 'jj36zzmydbz142ux14kpbsw5w747ta';
-
 export function ControlPanel(): React.JSX.Element {
   const { t, i18n } = useTranslation();
   const [authorization, setAuthorization] = useState<DeviceAuthorization>();
@@ -160,6 +159,7 @@ export function ControlPanel(): React.JSX.Element {
   const [raidPhaseStatus, setRaidPhaseStatus] = useState<RaidPhaseStatus>();
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo>();
   const [commercialInProgress, setCommercialInProgress] = useState<number>();
+  const commercialRequestInProgress = useRef(false);
   const [commercialResult, setCommercialResult] = useState<CommercialResult>();
   const [commercialError, setCommercialError] = useState<string>();
   const [commercialCooldownUntil, setCommercialCooldownUntil] = useState(0);
@@ -421,9 +421,7 @@ export function ControlPanel(): React.JSX.Element {
     setError(undefined);
     setConnectedUser(undefined);
     try {
-      const result = await invoke<DeviceAuthorization>('start_twitch_device_authorization', {
-        clientId: TWITCH_CLIENT_ID,
-      });
+      const result = await invoke<DeviceAuthorization>('start_twitch_device_authorization');
       setAuthorization(result);
       await openUrl(result.verificationUri);
     } catch (reason) {
@@ -445,6 +443,13 @@ export function ControlPanel(): React.JSX.Element {
   };
 
   const startCommercial = async (length: number) => {
+    if (
+      !connectedUser ||
+      commercialRequestInProgress.current ||
+      Date.now() < commercialCooldownUntil
+    )
+      return;
+    commercialRequestInProgress.current = true;
     setCommercialInProgress(length);
     setCommercialError(undefined);
     setCommercialResult(undefined);
@@ -457,6 +462,7 @@ export function ControlPanel(): React.JSX.Element {
     } catch (reason) {
       setCommercialError(String(reason));
     } finally {
+      commercialRequestInProgress.current = false;
       setCommercialInProgress(undefined);
     }
   };
@@ -785,6 +791,7 @@ export function ControlPanel(): React.JSX.Element {
               })}
             </p>
           )}
+          {commercialResult?.message && <p className="help-text">{commercialResult.message}</p>}
         </div>
 
         <div className="twitch-operation-block">
@@ -796,6 +803,8 @@ export function ControlPanel(): React.JSX.Element {
         </div>
         {commercialError && <p className="error">{commercialError}</p>}
       </section>
+
+      <ClipPlaybackControls />
 
       <section className="panel" aria-labelledby="external-emotes-title">
         <h2 id="external-emotes-title">{t('externalEmotes')}</h2>

@@ -65,7 +65,7 @@ Only one app instance can run at a time. If you launch the executable again, the
 
 Moving the overlay offscreen changes only its desktop coordinates; it does not close the window. OBS can therefore continue capturing the same window.
 
-Twitch clips always play muted to provide reliable autoplay behavior.
+Twitch clips request autoplay **with audio muted**. If a Twitch viewing confirmation or another issue blocks playback, select **Skip this clip** in the control panel to continue.
 
 ![obs settings2](docs/images/obs-settings2.png)
 
@@ -241,7 +241,7 @@ See [Persistent Twitch login](docs/twitch-token-refresh.md) for implementation d
 
 ### Development requirements
 
-- Node.js and npm
+- Node.js 24 LTS and npm
 - Rust stable and Cargo
 - Microsoft C++ Build Tools
 - Microsoft Edge WebView2 Runtime
@@ -252,6 +252,20 @@ Install dependencies:
 npm install
 ```
 
+### Twitch Client ID (development and build time only)
+
+Users of the official GitHub Releases build do not need this setup. The Client ID is embedded in the executable at build time; users can continue signing in with **Connect to Twitch**.
+
+To develop or build from source, register your own application in the [Twitch Developer Console](https://dev.twitch.tv/console/apps) and obtain a Client ID for a **Public** client using Device Code Flow. If you distribute a separate application, use your own ID rather than the official build's ID. See the [registration guide](https://dev.twitch.tv/docs/authentication/register-app/) and [Device Code Flow documentation](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow).
+
+For initial setup, copy the example in the project root. If `.env.local` already exists, edit it instead of overwriting it.
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Enter your own Client ID after `TWITCH_CLIENT_ID=` in `.env.local`. This file is excluded from Git. Do not put a Client Secret, access token, or refresh token in it.
+
 Start the Tauri development build:
 
 ```powershell
@@ -260,6 +274,19 @@ npm run dev:tauri
 
 If `cargo metadata: program not found` appears, install Rust, open a new terminal, and confirm that `cargo --version` succeeds.
 
+`npm run dev:tauri`, `npm run tauri:build`, and `npm run tauri:portable` read `.env.local`. An explicitly set `TWITCH_CLIENT_ID` environment variable takes precedence. Missing or empty values stop the build with an error; there is no fallback ID. Restart the development process or rebuild after changing the value.
+
+In CI, pass a GitHub Actions repository variable (or equivalent) as the build step's `TWITCH_CLIENT_ID` environment variable. Do not upload `.env.local` to CI. Set the environment variable explicitly when invoking Cargo or the Tauri CLI directly; those commands do not automatically load `.env.local`.
+
+```powershell
+$env:TWITCH_CLIENT_ID = 'YOUR_OWN_CLIENT_ID'
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+Authorization, API requests, and token refresh use the same Client ID. Updates using the same ID retain the existing login; builds using a different ID require a new login. Tokens stored for a different ID are not sent to Twitch, and the original token file is left untouched until the user signs in again.
+
+A Client ID is a public identifier. This setup helps prevent unintended reuse by separate applications; it does not make the ID inside the executable secret. It also does not remove Client IDs from existing Git history. Never publish or distribute Client Secrets or authentication tokens.
+
 ### Development commands
 
 | Command | Description |
@@ -267,6 +294,7 @@ If `cargo metadata: program not found` appears, install Rust, open a new termina
 | `npm run dev:tauri` | Start the Tauri development build |
 | `npm run build` | Build TypeScript and the renderer |
 | `npm run typecheck` | Run TypeScript type checking |
+| `npm test` | Test build configuration and UI behavior |
 | `npm run check` | Run Biome checks |
 | `npm run tauri:build` | Create a Tauri release build |
 | `npm run tauri:portable` | Create the Windows portable build and Release ZIP |

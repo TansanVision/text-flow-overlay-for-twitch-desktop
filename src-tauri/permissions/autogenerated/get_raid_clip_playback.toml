@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-raid-clip-playback"
+description = "Enables the get_raid_clip_playback command without any pre-configured scope."
+commands.allow = ["get_raid_clip_playback"]
+
+[[permission]]
+identifier = "deny-get-raid-clip-playback"
+description = "Denies the get_raid_clip_playback command without any pre-configured scope."
+commands.deny = ["get_raid_clip_playback"]

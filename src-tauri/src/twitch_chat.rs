@@ -6,6 +6,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio_tungstenite::connect_async;
 
+use crate::twitch_config::TWITCH_CLIENT_ID;
+
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
@@ -213,7 +215,7 @@ async fn create_subscription(access_token: &str, body: &Value) -> Result<(), Str
     let response = reqwest::Client::new()
         .post(SUBSCRIPTIONS_URL)
         .bearer_auth(access_token)
-        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .header("Client-Id", TWITCH_CLIENT_ID)
         .json(&body)
         .send()
         .await
@@ -266,7 +268,7 @@ async fn get_clips(access_token: &str, user_id: &str) -> Vec<RaidClip> {
         .get("https://api.twitch.tv/helix/clips")
         .query(&[("broadcaster_id", user_id), ("first", "5")])
         .bearer_auth(access_token)
-        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .header("Client-Id", TWITCH_CLIENT_ID)
         .send()
         .await
     {
@@ -308,7 +310,7 @@ async fn get_profile_image(access_token: &str, user_id: &str) -> Option<String> 
         .get("https://api.twitch.tv/helix/users")
         .query(&[("id", user_id)])
         .bearer_auth(access_token)
-        .header("Client-Id", "jj36zzmydbz142ux14kpbsw5w747ta")
+        .header("Client-Id", TWITCH_CLIENT_ID)
         .send()
         .await
         .ok()?;

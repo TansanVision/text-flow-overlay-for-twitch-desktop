@@ -12,6 +12,8 @@
     "allow-logout-twitch",
     "allow-send-twitch-shoutout",
     "allow-start-twitch-commercial",
+    "allow-get-raid-clip-playback",
+    "allow-skip-raid-clip",
     "allow-get-overlay-settings",
     "allow-save-overlay-settings",
     "allow-get-custom-stamps",

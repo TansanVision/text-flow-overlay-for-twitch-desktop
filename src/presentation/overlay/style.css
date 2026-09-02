@@ -320,7 +320,8 @@ body.overlay-page #root,
   position: absolute;
   top: 50%;
   left: 1vw;
-  z-index: 1000;
+  /* Keep the whole player above help (1100), comments, and effects. */
+  z-index: 2000;
   width: 46vw;
   min-width: 800px;
   height: 74vh;

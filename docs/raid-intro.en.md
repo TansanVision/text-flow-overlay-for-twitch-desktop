@@ -65,8 +65,20 @@ Cooldowns created before the app starts, or by Twitch and other tools, are not a
 
 - Each clip uses the duration reported by Twitch.
 - The app plays up to the configured number of returned clips.
-- Clips always play muted to provide reliable autoplay in distributed builds.
+- Clips request muted autoplay, but a Twitch viewing confirmation or another issue may block playback.
 - Manually requested clips are displayed in the OBS overlay.
+
+### Skip a clip
+
+While a clip is displayed, **Current clip** appears in the control panel with the raider, title, position in the playlist, and a **Skip this clip** button.
+
+1. Select the button if playback is blocked or you want to omit that clip.
+2. Only the current clip ends, and the next clip is shown.
+3. After the last clip, automatic mode follows the shoutout setting. Manual mode completes only the clip action; shoutout remains manual. A card closes once all enabled actions finish.
+
+Skipping works for automatic introductions, manual introductions, and the control-panel clip test. It does not dismiss Twitch viewing confirmations. The display duration is a timer based on the clip length returned by Twitch, not detection of actual playback start or completion.
+
+Repeated clicks and a concurrent timer expiry advance the same clip only once. The controls disappear when clip playback ends.
 
 ## Settings compatibility
 

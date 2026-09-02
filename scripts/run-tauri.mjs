@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { twitchBuildEnvironment } from './twitch-build-env.mjs';
 
 const command = process.argv[2];
 const commandArguments = process.argv.slice(3);
@@ -17,7 +18,7 @@ const executable = path.resolve(
 
 const child = spawn(executable, [command, ...commandArguments], {
   env: {
-    ...process.env,
+    ...twitchBuildEnvironment(process.cwd()),
     PATH: `${cargoBin}${path.delimiter}${process.env.PATH ?? ''}`,
   },
   shell: process.platform === 'win32',

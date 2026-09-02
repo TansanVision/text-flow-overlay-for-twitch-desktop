@@ -75,7 +75,15 @@ const ja = {
   autoShoutout: '終了後シャウトアウト',
   manualShoutoutAction: 'シャウトアウト操作を表示',
   clipHelp:
-    '再生時間はTwitchから取得した各クリップの実時間を使用します。配布環境で安定して再生できるよう、クリップは常にミュートで自動再生します。',
+    '各クリップの表示時間にはTwitchから取得した長さを使用します。ミュートで自動再生を要求しますが、Twitchの視聴確認などで停止する場合はスキップできます。',
+  currentRaidClip: '表示中のクリップ',
+  clipPosition: '{{current}} / {{total}}本目',
+  skipRaidClip: 'このクリップをスキップ',
+  skippingRaidClip: 'スキップ中…',
+  skipRaidClipHelp:
+    '現在の1本を終了します。最後の1本では、自動紹介は設定に従ってシャウトアウトへ、手動紹介は操作カードへ戻ります。',
+  skipRaidClipFailed: 'クリップをスキップできませんでした: {{error}}',
+  clipPlaybackLoadFailed: 'クリップの表示状態を取得できませんでした: {{error}}',
   saveRaid: 'Raid設定を保存',
   manualRaid: '手動Raid操作',
   manualRaidHelp:
@@ -221,7 +229,15 @@ const en: Record<keyof typeof ja, string> = {
   autoShoutout: 'Shoutout after playback',
   manualShoutoutAction: 'Show shoutout action',
   clipHelp:
-    'Each clip uses its duration reported by Twitch. Clips always autoplay muted for reliable playback in distributed builds.',
+    'Each clip is displayed for its duration reported by Twitch. Muted autoplay is requested, but you can skip a clip if a Twitch viewing confirmation or another issue blocks playback.',
+  currentRaidClip: 'Current clip',
+  clipPosition: 'Clip {{current}} of {{total}}',
+  skipRaidClip: 'Skip this clip',
+  skippingRaidClip: 'Skipping…',
+  skipRaidClipHelp:
+    'Ends only the current clip. After the last clip, automatic mode follows the shoutout setting; manual mode returns to the action card.',
+  skipRaidClipFailed: 'Could not skip the clip: {{error}}',
+  clipPlaybackLoadFailed: 'Could not load the current clip: {{error}}',
   saveRaid: 'Save Raid settings',
   manualRaid: 'Manual Raid actions',
   manualRaidHelp:

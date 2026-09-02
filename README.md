@@ -65,7 +65,7 @@ Windows 10・11の多くの環境にはWebView2 Runtimeが導入済みです。�
 
 画面外への移動はウィンドウを閉じず、座標だけをデスクトップ外へ変更します。そのため、OBSは同じウィンドウを継続してキャプチャできます。
 
-Twitchクリップは安定した自動再生のため**常にミュート**です。
+Twitchクリップは**常にミュート**で自動再生を要求します。Twitchの視聴確認などで停止する場合は、コンパネの「このクリップをスキップ」で次へ進めます。
 
 ![OBS設定2](docs/images/obs-settings2.png)
 
@@ -243,7 +243,7 @@ Twitchのアクセストークンとrefresh tokenは`portable-data/auth/twitch-t
 
 開発には次の環境が必要です。
 
-- Node.jsとnpm
+- Node.js 24 LTSとnpm
 - Rust stableとCargo
 - Microsoft C++ Build Tools
 - Microsoft Edge WebView2 Runtime
@@ -254,6 +254,20 @@ Twitchのアクセストークンとrefresh tokenは`portable-data/auth/twitch-t
 npm install
 ```
 
+### Twitch Client IDの設定（開発・ビルド時のみ）
+
+GitHub Releasesの公式配布版を使うだけの場合、この設定は不要です。Client IDはビルド時にEXEへ組み込み、利用者は従来どおり「Twitchに接続」からログインできます。
+
+ソースから開発・ビルドする場合は、[Twitch Developer Console](https://dev.twitch.tv/console/apps)で自分のアプリを登録し、Device Code Flowを利用する**Public**クライアントのClient IDを用意してください。別アプリとして配布する場合、公式配布版のIDを使い回さず、自分のIDを使用してください。[Twitchの登録ガイド](https://dev.twitch.tv/docs/authentication/register-app/)と[Device Code Flowの説明](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow)も参照してください。
+
+初回のみ、プロジェクト直下で設定例をコピーします。既存の`.env.local`がある場合は上書きせず編集してください。
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+`.env.local`の`TWITCH_CLIENT_ID=`の右側に自分のClient IDを入力してください。このファイルはGit管理対象外です。Client Secretやアクセストークン、refresh tokenは記載しないでください。
+
 Tauri開発版を起動します。
 
 ```powershell
@@ -262,6 +276,19 @@ npm run dev:tauri
 
 `cargo metadata: program not found`と表示される場合はRustを導入し、新しいターミナルで`cargo --version`が成功することを確認してください。
 
+`npm run dev:tauri`、`npm run tauri:build`、`npm run tauri:portable`は`.env.local`を読み込みます。環境変数`TWITCH_CLIENT_ID`を明示的に設定した場合は、そちらを優先します。未設定・空欄の場合はエラーで停止し、既定のIDへのフォールバックはしません。設定変更後は開発プロセスを再起動、またはビルドし直してください。
+
+CIではGitHub ActionsのRepository variableなどから、ビルドステップの環境変数`TWITCH_CLIENT_ID`へ値を渡します。`.env.local`をCIへアップロードする必要はありません。CargoやTauri CLIを直接実行する場合も、環境変数を明示してください（直接実行時は`.env.local`を自動で読み込みません）。
+
+```powershell
+$env:TWITCH_CLIENT_ID = 'YOUR_OWN_CLIENT_ID'
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+認証開始、APIリクエスト、トークン更新は同じClient IDを使用します。同じIDの更新版では既存のログインを引き継ぎますが、別のIDでビルドしたアプリでは再ログインが必要です。異なるIDの保存済みトークンはTwitchへ送信せず、再ログインするまでは元の認証ファイルを変更しません。
+
+Client IDは公開識別子です。この構成は別アプリでの意図しない使い回しを防ぐためのもので、EXE内のIDを秘密にする仕組みではありません。過去のGit履歴にあるClient IDも自動では削除されません。Client Secretや認証トークンは公開・配布しないでください。
+
 ### 開発用コマンド
 
 | コマンド | 内容 |
@@ -269,6 +296,7 @@ npm run dev:tauri
 | `npm run dev:tauri` | Tauri開発版を起動 |
 | `npm run build` | TypeScriptとrendererをビルド |
 | `npm run typecheck` | TypeScript型チェック |
+| `npm test` | ビルド設定と画面処理のテスト |
 | `npm run check` | Biomeチェック |
 | `npm run tauri:build` | Tauriリリースビルド |
 | `npm run tauri:portable` | Windowsポータブル版とRelease用ZIPを作成 |
