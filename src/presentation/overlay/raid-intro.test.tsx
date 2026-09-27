@@ -37,7 +37,7 @@ function props(overrides: Partial<ComponentProps<typeof RaidIntro>> = {}) {
       broadcasterUserId: '123',
       viewerCount: 10,
       clips: [1, 2, 3].map((number) => ({
-        id: String(number),
+        id: `clip${number}`,
         title: `Clip ${number}`,
         embedUrl: `https://clips.twitch.tv/embed?clip=clip${number}`,
         duration: 10,
@@ -65,6 +65,34 @@ async function render(raidProps = props(), controlsOnly = false) {
       </>,
     );
   });
+}
+
+async function media(
+  state: string,
+  time = 0,
+  source = container.querySelector('iframe')?.contentWindow,
+  id = current?.playbackId,
+  origin = 'https://clips.twitch.tv',
+) {
+  await act(async () =>
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin,
+        source: source ?? null,
+        data: {
+          channel: 'text-flow:clip-player',
+          playbackId: id,
+          mediaId: 1,
+          state,
+          currentTime: time,
+        },
+      }),
+    ),
+  );
+}
+
+async function frameLoaded() {
+  await act(async () => container.querySelector('iframe')?.dispatchEvent(new Event('load')));
 }
 
 async function skip() {
@@ -158,8 +186,11 @@ describe('clip skip controls and Raid progression', () => {
     const iframe = container.querySelector('iframe');
     expect(iframe).not.toBeNull();
     if (!iframe) throw new Error('Clip iframe is missing');
-    expect(iframe.width).toBe('800');
-    expect(iframe.height).toBe('540');
+    expect(iframe.width).toBe('640');
+    expect(iframe.height).toBe('360');
+    expect(overlayStyles).toMatch(
+      /width:\s*40vw;\s*min-width:\s*640px;\s*height:\s*56vh;\s*min-height:\s*404px;/,
+    );
     expect(window.getComputedStyle(iframe).display).not.toBe('none');
     expect(window.getComputedStyle(iframe).visibility).toBe('visible');
   });
@@ -234,11 +265,11 @@ describe('clip skip controls and Raid progression', () => {
     await render();
     const playbackId = current?.playbackId;
     await act(async () => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(32_000);
       emit('raid-clip-skip-requested', { playbackId });
     });
     expect(current?.clipNumber).toBe(2);
-    await act(async () => vi.advanceTimersByTime(9999));
+    await act(async () => vi.advanceTimersByTime(31_999));
     expect(current?.clipNumber).toBe(2);
     await act(async () => vi.advanceTimersByTime(1));
     expect(current?.clipNumber).toBe(3);
@@ -305,5 +336,111 @@ describe('clip skip controls and Raid progression', () => {
     await skip();
     expect(container.querySelector('button')?.disabled).toBe(true);
     expect(container.querySelector('button')?.textContent).toBe('スキップ中…');
+  });
+  it('waits for actual playback and finishes on ended, not on the clip length', async () => {
+    await render();
+    await media('ready');
+    await act(async () => vi.advanceTimersByTime(15_000));
+    expect(current?.clipNumber).toBe(1);
+    expect(current?.status).toBe('loading');
+    await media('playing');
+    await act(async () => vi.advanceTimersByTime(10_000));
+    expect(current?.clipNumber).toBe(1);
+    expect(current?.status).toBe('playing');
+    await media('ended', 10);
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('keeps a progressing video playing even if the reported clip duration is wrong', async () => {
+    await render();
+    await media('ready');
+    await media('playing');
+    for (const time of [20, 40, 60]) {
+      await act(async () => vi.advanceTimersByTime(20_000));
+      await media('progress', time);
+    }
+    expect(current?.clipNumber).toBe(1);
+    await media('ended', 61);
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('shows a stalled playback state, recovers on progress, and times out if progress stops', async () => {
+    await render();
+    await media('ready');
+    await media('playing');
+    await media('waiting');
+    expect(current?.status).toBe('waiting');
+    await act(async () => vi.advanceTimersByTime(20_000));
+    await media('progress', 1);
+    expect(current?.status).toBe('playing');
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(current?.status).toBe('unavailable');
+    expect(current?.clipNumber).toBe(1);
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('does not trust ended before playback or messages from another origin, frame or clip', async () => {
+    await render();
+    const frame = container.querySelector('iframe');
+    const id = current?.playbackId;
+    await media('ready');
+    await media('ended');
+    expect(current?.clipNumber).toBe(1);
+    await media('playing');
+    await media('ended', 10, frame?.contentWindow, id, 'https://example.com');
+    await media('ended', 10, window, id);
+    await media('ended', 10, frame?.contentWindow, 'old-playback');
+    expect(current?.clipNumber).toBe(1);
+    await skip();
+    await media('ended', 10, frame?.contentWindow, current?.playbackId);
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('uses a clearly unconfirmed fallback only after frame load without the native observer', async () => {
+    await render();
+    await act(async () => vi.advanceTimersByTime(12_000));
+    expect(current?.clipNumber).toBe(1);
+    await frameLoaded();
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(current?.status).toBe('unconfirmed');
+    await act(async () => vi.advanceTimersByTime(12_999));
+    expect(current?.clipNumber).toBe(1);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('cancels the duration fallback if native observation arrives late', async () => {
+    await render();
+    await frameLoaded();
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(current?.status).toBe('unconfirmed');
+    await media('ready');
+    await media('playing');
+    await act(async () => vi.advanceTimersByTime(13_000));
+    expect(current?.clipNumber).toBe(1);
+    await media('ended', 10);
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('recreates the frame for two consecutive entries with the same clip ID', async () => {
+    const value = props();
+    const firstClip = value.raid.clips?.[0];
+    if (!firstClip) throw new Error('Missing fixture clip');
+    value.raid.clips = [firstClip, { ...firstClip }, firstClip];
+    await render(value);
+    const firstFrame = container.querySelector('iframe');
+    await skip();
+    expect(container.querySelector('iframe')).not.toBe(firstFrame);
+    expect(current?.clipNumber).toBe(2);
+  });
+
+  it('does not keep a stuck clip alive with duplicate playing events', async () => {
+    await render();
+    await media('playing', 0);
+    await act(async () => vi.advanceTimersByTime(20_000));
+    await media('playing', 0);
+    await act(async () => vi.advanceTimersByTime(12_000));
+    expect(current?.clipNumber).toBe(2);
   });
 });

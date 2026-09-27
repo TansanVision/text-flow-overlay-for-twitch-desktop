@@ -63,10 +63,15 @@ Cooldowns created before the app starts, or by Twitch and other tools, are not a
 
 ## Clip playback
 
-- Each clip uses the duration reported by Twitch.
-- The app plays up to the configured number of returned clips.
+- The Windows app observes video playback start, progress, and completion inside the embed.
+- When a video is ready but paused, it attempts muted playback up to three times.
+- Loading does not consume the clip duration; the video ended event advances the playlist.
+- If playback fails to start or make progress for 30 seconds, the control panel shows the failure for two seconds before advancing.
+- At Raid receipt, the app randomly selects up to five clips from the broadcaster's top 100 by view count, then plays up to the configured number.
 - Clips request muted autoplay, but a Twitch viewing confirmation or another issue may block playback.
 - Manually requested clips are displayed in the OBS overlay.
+
+Video observation uses Tauri's frame initialization support and standard HTML media events. It does not click Twitch confirmations or extract video URLs. Twitch changes or restrictions, network errors, and off-screen or hidden windows may still prevent playback. If moving the overlay off-screen causes playback to stop, compare the same clip with the overlay back on-screen.
 
 ### Skip a clip
 
@@ -76,7 +81,7 @@ While a clip is displayed, **Current clip** appears in the control panel with th
 2. Only the current clip ends, and the next clip is shown.
 3. After the last clip, automatic mode follows the shoutout setting. Manual mode completes only the clip action; shoutout remains manual. A card closes once all enabled actions finish.
 
-Skipping works for automatic introductions, manual introductions, and the control-panel clip test. It does not dismiss Twitch viewing confirmations. The display duration is a timer based on the clip length returned by Twitch, not detection of actual playback start or completion.
+Skipping works for automatic introductions, manual introductions, and the control-panel clip test. It does not dismiss Twitch viewing confirmations. If video observation is unavailable, such as in a browser-only preview, the control panel reports that playback is unconfirmed and estimates display time from the clip duration after the frame loads.
 
 Repeated clicks and a concurrent timer expiry advance the same clip only once. The controls disappear when clip playback ends.
 

@@ -322,10 +322,10 @@ body.overlay-page #root,
   left: 1vw;
   /* Keep the whole player above help (1100), comments, and effects. */
   z-index: 2000;
-  width: 46vw;
-  min-width: 800px;
-  height: 74vh;
-  min-height: 584px;
+  width: 40vw;
+  min-width: 640px;
+  height: 56vh;
+  min-height: 404px;
   overflow: hidden;
   border: 1px solid rgba(177, 119, 255, 0.7);
   border-radius: 12px;

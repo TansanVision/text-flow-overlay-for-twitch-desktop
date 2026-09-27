@@ -4,6 +4,16 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RaidClipPlaybackStatus {
+    Loading,
+    Playing,
+    Waiting,
+    Unconfirmed,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RaidClipPlayback {
     playback_id: String,
@@ -12,6 +22,8 @@ pub struct RaidClipPlayback {
     title: String,
     clip_number: usize,
     clip_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    status: Option<RaidClipPlaybackStatus>,
 }
 
 #[derive(Default)]
@@ -97,6 +109,7 @@ mod tests {
             title: "Clip".into(),
             clip_number: 1,
             clip_count: 2,
+            status: None,
         }
     }
 

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use rand::{seq::SliceRandom, Rng};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
@@ -10,6 +11,8 @@ use crate::twitch_config::TWITCH_CLIENT_ID;
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
+const CLIP_CANDIDATE_LIMIT: &str = "100";
+const RAID_CLIP_LIMIT: usize = 5;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -266,7 +269,7 @@ async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Resu
 async fn get_clips(access_token: &str, user_id: &str) -> Vec<RaidClip> {
     let response = match reqwest::Client::new()
         .get("https://api.twitch.tv/helix/clips")
-        .query(&[("broadcaster_id", user_id), ("first", "5")])
+        .query(&[("broadcaster_id", user_id), ("first", CLIP_CANDIDATE_LIMIT)])
         .bearer_auth(access_token)
         .header("Client-Id", TWITCH_CLIENT_ID)
         .send()
@@ -289,7 +292,7 @@ async fn get_clips(access_token: &str, user_id: &str) -> Vec<RaidClip> {
             return Vec::new();
         }
     };
-    value["data"]
+    let clips = value["data"]
         .as_array()
         .into_iter()
         .flatten()
@@ -302,7 +305,18 @@ async fn get_clips(access_token: &str, user_id: &str) -> Vec<RaidClip> {
                 view_count: clip["view_count"].as_u64().unwrap_or_default(),
             })
         })
-        .collect()
+        .collect();
+    select_random_clips(clips, RAID_CLIP_LIMIT, &mut rand::rng())
+}
+
+fn select_random_clips<R: Rng + ?Sized>(
+    mut clips: Vec<RaidClip>,
+    limit: usize,
+    rng: &mut R,
+) -> Vec<RaidClip> {
+    clips.shuffle(rng);
+    clips.truncate(limit);
+    clips
 }
 
 async fn get_profile_image(access_token: &str, user_id: &str) -> Option<String> {
@@ -428,4 +442,50 @@ fn convert_fragment(fragment: &Value, index: usize) -> ChatFragment {
         }
     }
     ChatFragment::Text { key, text }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use rand::{rngs::StdRng, SeedableRng};
+
+    use super::{select_random_clips, RaidClip};
+
+    fn clip(index: usize) -> RaidClip {
+        RaidClip {
+            id: index.to_string(),
+            title: format!("Clip {index}"),
+            embed_url: format!("https://clips.twitch.tv/embed?clip={index}"),
+            duration: 30.0,
+            view_count: 100 - index as u64,
+        }
+    }
+
+    #[test]
+    fn random_selection_uses_the_larger_candidate_pool_without_duplicates() {
+        let candidates = (0..100).map(clip).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let selected = select_random_clips(candidates, 5, &mut rng);
+        let ids: HashSet<_> = selected.iter().map(|clip| clip.id.as_str()).collect();
+
+        assert_eq!(selected.len(), 5);
+        assert_eq!(ids.len(), 5);
+        assert!(selected
+            .iter()
+            .any(|clip| clip.id.parse::<usize>().unwrap() >= 5));
+    }
+
+    #[test]
+    fn random_selection_keeps_every_clip_when_the_pool_is_smaller_than_the_limit() {
+        let candidates = (0..3).map(clip).collect();
+        let mut rng = StdRng::seed_from_u64(7);
+
+        let selected = select_random_clips(candidates, 5, &mut rng);
+        let ids: HashSet<_> = selected.iter().map(|clip| clip.id.as_str()).collect();
+
+        assert_eq!(selected.len(), 3);
+        assert_eq!(ids, HashSet::from(["0", "1", "2"]));
+    }
 }

@@ -142,6 +142,7 @@ pub fn run() {
                         .expect("failed to build the localhost overlay URL"),
                 ),
             )
+            .initialization_script_for_all_frames(include_str!("clip-player-bridge.js"))
             .title("Text Flow Overlay for Twitch")
             .inner_size(1280.0, 720.0)
             .fullscreen(false)

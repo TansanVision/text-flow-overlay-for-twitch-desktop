@@ -74,6 +74,19 @@ export function ClipPlaybackControls() {
             {t('clipPosition', { current: playback.clipNumber, total: playback.clipCount })}
           </p>
           <p>{playback.title}</p>
+          {playback.status && (
+            <p role="status">
+              {t(
+                {
+                  loading: 'clipPlaybackLoading',
+                  playing: 'clipPlaybackPlaying',
+                  waiting: 'clipPlaybackWaiting',
+                  unconfirmed: 'clipPlaybackUnconfirmed',
+                  unavailable: 'clipPlaybackUnavailable',
+                }[playback.status],
+              )}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => void skip()}

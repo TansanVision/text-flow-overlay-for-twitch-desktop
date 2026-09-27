@@ -55,6 +55,7 @@ export function RaidIntro({
   const [remaining, setRemaining] = useState(duration);
   const [phase, setPhase] = useState<RaidPhase>(initialPhase);
   const [clipIndex, setClipIndex] = useState(0);
+  const clipFrameRef = useRef<HTMLIFrameElement>(null);
   const introCompleted = useRef(false);
   const manualNotificationStarted = useRef(false);
   const clipPlaybackCompleted = useRef(false);
@@ -138,6 +139,7 @@ export function RaidIntro({
     clipIndex + 1,
     clips.length,
     advanceClip,
+    clipFrameRef,
   );
 
   useEffect(() => {
@@ -172,9 +174,11 @@ export function RaidIntro({
   if (phase === 'clips') {
     const clip = clips[clipIndex];
     if (!clip) return null;
-    const separator = clip.embedUrl.includes('?') ? '&' : '?';
-    const parent = window.location.hostname || 'localhost';
-    const source = `${clip.embedUrl}${separator}parent=${encodeURIComponent(parent)}&autoplay=true&muted=true`;
+    const source = new URL('https://clips.twitch.tv/embed');
+    source.searchParams.set('clip', clip.id);
+    source.searchParams.set('parent', window.location.hostname || 'localhost');
+    source.searchParams.set('autoplay', 'true');
+    source.searchParams.set('muted', 'true');
     return (
       <aside className="raid-clip-player">
         <header>
@@ -182,12 +186,14 @@ export function RaidIntro({
           <span>{clip.title}</span>
         </header>
         <iframe
-          key={`${raid.id}-${clip.id}-${phase}`}
-          src={source}
+          ref={clipFrameRef}
+          key={`${raid.id}-${clipIndex}-${clip.id}-${phase}`}
+          src={source.toString()}
+          loading="eager"
           title={`${raid.displayName}: ${clip.title}`}
           allow="autoplay; fullscreen"
-          height="540"
-          width="800"
+          height="360"
+          width="640"
           allowFullScreen
         />
       </aside>

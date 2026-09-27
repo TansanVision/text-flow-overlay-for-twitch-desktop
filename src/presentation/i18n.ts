@@ -84,6 +84,12 @@ const ja = {
     '現在の1本を終了します。最後の1本では、自動紹介は設定に従ってシャウトアウトへ、手動紹介は操作カードへ戻ります。',
   skipRaidClipFailed: 'クリップをスキップできませんでした: {{error}}',
   clipPlaybackLoadFailed: 'クリップの表示状態を取得できませんでした: {{error}}',
+  clipPlaybackLoading: '動画の再生開始を待っています…',
+  clipPlaybackPlaying: '再生中',
+  clipPlaybackWaiting: '再生が止まっています。復帰を待っています…',
+  clipPlaybackUnconfirmed:
+    '再生状態を確認できないため、クリップの長さから表示時間を推定しています。',
+  clipPlaybackUnavailable: '再生を確認できませんでした。次のクリップへ進みます。',
   saveRaid: 'Raid設定を保存',
   manualRaid: '手動Raid操作',
   manualRaidHelp:
@@ -238,6 +244,12 @@ const en: Record<keyof typeof ja, string> = {
     'Ends only the current clip. After the last clip, automatic mode follows the shoutout setting; manual mode returns to the action card.',
   skipRaidClipFailed: 'Could not skip the clip: {{error}}',
   clipPlaybackLoadFailed: 'Could not load the current clip: {{error}}',
+  clipPlaybackLoading: 'Waiting for video playback to start…',
+  clipPlaybackPlaying: 'Playing',
+  clipPlaybackWaiting: 'Playback has stopped. Waiting for it to resume…',
+  clipPlaybackUnconfirmed:
+    'Playback cannot be observed. Display time is estimated from clip duration.',
+  clipPlaybackUnavailable: 'Playback could not be confirmed. Moving to the next clip.',
   saveRaid: 'Save Raid settings',
   manualRaid: 'Manual Raid actions',
   manualRaidHelp:
