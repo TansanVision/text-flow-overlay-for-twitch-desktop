@@ -44,6 +44,7 @@ it('allows previews without authorization and disables reward creation', async (
     ['お祝い花火', 'fireworks'],
     ['シャボン玉', 'bubbles'],
     ['ペイント遊び', 'paint'],
+    ['流星群', 'meteors'],
   ]) {
     const form = [...container.querySelectorAll('form')].find(
       (candidate) => candidate.querySelector('h3')?.textContent === label,

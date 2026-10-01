@@ -16,6 +16,9 @@ const ja = {
   pointsFireworks: 'お祝い花火',
   pointsBubbles: 'シャボン玉',
   pointsPaint: 'ペイント遊び',
+  pointsMeteors: '流星群',
+  pointsMeteorsHelp:
+    '10秒間、光の尾を引く流れ星が右上から左下へ次々に流れます。小さな星がきらめき、最後に金色の大きな流れ星が横切ります。',
   pointsPaintHelp:
     '10秒間、6色の絵の具が画面のあちこちに飛び散ります。ぷるんと広がって少し垂れ、順番に薄くなって消えます。',
   pointsBubblesHelp:
@@ -236,6 +239,9 @@ const en: Record<keyof typeof ja, string> = {
   pointsFireworks: 'Celebration fireworks',
   pointsBubbles: 'Soap bubbles',
   pointsPaint: 'Paint play',
+  pointsMeteors: 'Meteor shower',
+  pointsMeteorsHelp:
+    'For 10 seconds, meteors with glowing trails streak from the upper right to the lower left. Tiny stars twinkle, ending with a large golden shooting star.',
   pointsPaintHelp:
     'For 10 seconds, paint in six colors splashes across the screen. Each splat spreads with a bounce, drips a little, and gradually fades away.',
   pointsBubblesHelp:

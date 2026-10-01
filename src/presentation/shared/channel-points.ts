@@ -6,6 +6,7 @@ export const pointsEffects = [
   'fireworks',
   'bubbles',
   'paint',
+  'meteors',
 ] as const;
 export type PointsEffect = (typeof pointsEffects)[number];
 export type PointsJobStatus =
@@ -48,4 +49,5 @@ export const pointsLabels = {
   fireworks: 'pointsFireworks',
   bubbles: 'pointsBubbles',
   paint: 'pointsPaint',
+  meteors: 'pointsMeteors',
 } as const;
