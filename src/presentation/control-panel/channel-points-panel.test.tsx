@@ -39,7 +39,10 @@ it('allows previews without authorization and disables reward creation', async (
   );
   await act(async () => preview?.click());
   expect(invoke).toHaveBeenCalledWith('preview_channel_point_effect', { effect: 'hearts' });
-  for (const [label, effect] of [['エモート噴水', 'emoteFountain']]) {
+  for (const [label, effect] of [
+    ['エモート噴水', 'emoteFountain'],
+    ['お祝い花火', 'fireworks'],
+  ]) {
     const form = [...container.querySelectorAll('form')].find(
       (candidate) => candidate.querySelector('h3')?.textContent === label,
     );

@@ -13,6 +13,9 @@ const ja = {
     '報酬の作成にはTwitchのチャンネルポイント利用資格と追加の認証が必要です。オーバーレイを表示してテストしてください。',
   pointsHearts: 'ふわふわハート',
   pointsEmoteFountain: 'エモート噴水',
+  pointsFireworks: 'お祝い花火',
+  pointsFireworksHelp:
+    '10秒間、左右から色とりどりの花火が上がり、最後に中央で金色の大輪が開きます。光の粒がゆっくり落ちて消えます。',
   pointsEmoteFountainHelp:
     '8秒間、登録済みカスタムスタンプが画面下の3か所から噴き上がり、回転しながら弧を描いて落ちます。未登録・読み込み失敗時は内蔵スマイルを表示します。',
   pointsHeartsHelp:
@@ -224,6 +227,9 @@ const en: Record<keyof typeof ja, string> = {
     'Creating rewards requires Twitch channel point eligibility and additional authorization. Show the overlay to preview effects.',
   pointsHearts: 'Floating hearts',
   pointsEmoteFountain: 'Emote fountain',
+  pointsFireworks: 'Celebration fireworks',
+  pointsFireworksHelp:
+    'For 10 seconds, colorful fireworks launch from both sides, ending with a large golden burst in the center. Glowing embers gently fall and fade.',
   pointsEmoteFountainHelp:
     'For 8 seconds, your custom stamps burst from three points along the bottom, spin, and fall in arcs. Built-in smileys appear when no stamps are registered or an image fails to load.',
   pointsHeartsHelp:

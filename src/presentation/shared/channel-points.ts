@@ -1,4 +1,4 @@
-export const pointsEffects = ['hearts', 'gravity', 'flower', 'emoteFountain'] as const;
+export const pointsEffects = ['hearts', 'gravity', 'flower', 'emoteFountain', 'fireworks'] as const;
 export type PointsEffect = (typeof pointsEffects)[number];
 export type PointsJobStatus =
   | 'queued'
@@ -37,4 +37,5 @@ export const pointsLabels = {
   gravity: 'pointsGravity',
   flower: 'pointsFlower',
   emoteFountain: 'pointsEmoteFountain',
+  fireworks: 'pointsFireworks',
 } as const;
