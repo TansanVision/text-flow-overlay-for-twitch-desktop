@@ -12,7 +12,9 @@ import {
   installCustomFonts,
 } from '../comment-font';
 import type { Language } from '../i18n';
+import { ChannelPointsPanel } from './channel-points-panel';
 import { ClipPlaybackControls } from './clip-playback-controls';
+import { TwitchConnectionStatus } from './twitch-connection-status';
 import './style.css';
 
 type DeviceAuthorization = {
@@ -35,6 +37,7 @@ type PollResult =
 
 type RestoreResult =
   | { status: 'disconnected' }
+  | { status: 'retrying' }
   | {
       status: 'authorized';
       login: string;
@@ -371,8 +374,18 @@ export function ControlPanel(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    void invoke<RestoreResult>('restore_twitch_authorization')
-      .then((result) => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const restore = async () => {
+      try {
+        const result = await invoke<RestoreResult>('restore_twitch_authorization');
+        if (cancelled) return;
+        if (result.status === 'retrying') {
+          setError(i18n.t('chatRestoreRetry'));
+          retryTimer = setTimeout(() => void restore(), 15_000);
+          return;
+        }
+        setError(undefined);
         if (result.status === 'authorized') {
           setConnectedUser({
             login: result.login,
@@ -380,10 +393,18 @@ export function ControlPanel(): React.JSX.Element {
             profileImageUrl: result.profileImageUrl,
           });
         }
-      })
-      .catch((reason: unknown) => setError(String(reason)))
-      .finally(() => setIsRestoring(false));
-  }, []);
+      } catch (reason) {
+        if (cancelled) return;
+        setError(String(reason));
+      }
+      if (!cancelled) setIsRestoring(false);
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+    };
+  }, [i18n]);
 
   useEffect(() => {
     if (!authorization || connectedUser) return;
@@ -416,12 +437,16 @@ export function ControlPanel(): React.JSX.Element {
     };
   }, [authorization, connectedUser]);
 
-  const startAuthorization = async () => {
+  const startAuthorization = async (channelPoints = false) => {
     setIsStarting(true);
     setError(undefined);
     setConnectedUser(undefined);
     try {
-      const result = await invoke<DeviceAuthorization>('start_twitch_device_authorization');
+      const result = channelPoints
+        ? await invoke<DeviceAuthorization>('start_twitch_device_authorization', {
+            channelPoints: true,
+          })
+        : await invoke<DeviceAuthorization>('start_twitch_device_authorization');
       setAuthorization(result);
       await openUrl(result.verificationUri);
     } catch (reason) {
@@ -751,9 +776,14 @@ export function ControlPanel(): React.JSX.Element {
             </button>
           </div>
         )}
+        {!isRestoring && <TwitchConnectionStatus onReauthorize={startAuthorization} />}
         {error && <p className="error">{error}</p>}
       </section>
 
+      <ChannelPointsPanel
+        onAuthorize={() => startAuthorization(true)}
+        authorizationBusy={isRestoring || isStarting || Boolean(authorization)}
+      />
       <section className="panel" aria-labelledby="twitch-operations-title">
         <h2 id="twitch-operations-title">{t('twitchOperations')}</h2>
         <div className="twitch-operation-block">

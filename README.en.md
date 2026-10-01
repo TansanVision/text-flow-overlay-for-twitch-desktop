@@ -13,6 +13,7 @@ No Streamer.bot setup or installer is required. Extract the ZIP, launch the exec
 ## Features
 
 - Flow Twitch chat messages and emotes across the screen
+- Sync deleted messages, user timeouts/bans, and chat clears with the overlay, including effects triggered by those messages
 - Display BTTV and 7TV emotes
 - Show built-in effects such as cherry blossoms, snow, balloons, and confetti
 - Register your own images as custom stamps
@@ -28,6 +29,8 @@ No Streamer.bot setup or installer is required. Extract the ZIP, launch the exec
 - Keep settings and custom assets beside the executable for portability
 
 After connecting to Twitch once, your login is saved and the connection will normally be restored the next time the app starts.
+
+The control panel shows sign-in and chat connection status separately. Interrupted connections retry automatically; use **Reconnect now** or **Reauthorize** when shown. Notifications missed during a disconnected period cannot be recovered. If optional Raid, Bits, or subscription events are unavailable, chat continues and a warning identifies the affected events.
 
 ## Requirements
 

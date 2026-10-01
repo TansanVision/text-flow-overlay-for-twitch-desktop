@@ -1,0 +1,154 @@
+.points-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.points-visual[data-paused="true"] {
+  visibility: hidden;
+}
+.points-visual[data-paused="true"] * {
+  animation-play-state: paused;
+}
+.points-hearts {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.points-heart {
+  position: absolute;
+  bottom: -6vh;
+  height: auto;
+  opacity: 0;
+  filter: drop-shadow(0 0 0.6vh #ffb3d133);
+  animation: points-heart-rise var(--heart-duration) ease-out var(--heart-delay) both;
+}
+.points-gravity {
+  animation: points-float 3s ease-in-out infinite alternate;
+}
+.points-flower-bed {
+  position: absolute;
+  inset: auto 0 0;
+  height: 20vh;
+  overflow: hidden;
+  animation: points-flower-life 12s ease-in-out both;
+}
+.points-flower-row {
+  position: absolute;
+  inset: 0;
+}
+.points-flower-row[data-row="0"] {
+  opacity: 0.85;
+}
+.points-flower-stem {
+  position: absolute;
+  bottom: -1.5vh;
+  aspect-ratio: 100 / 130;
+  transform-origin: bottom center;
+  animation: points-grow 1.1s ease-out var(--flower-delay) both;
+}
+.points-flower {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: bottom center;
+  animation: points-flower-sway 2.8s ease-in-out var(--flower-delay) infinite alternate;
+}
+.points-petals {
+  transform-origin: 50px 48px;
+  animation: points-bloom 1.2s ease-out var(--flower-delay) both;
+}
+.points-preview {
+  position: absolute;
+  top: 40%;
+  left: 20%;
+  color: #fff4cf;
+  font:
+    700 4vh system-ui,
+    sans-serif;
+  text-shadow: 0 2px 4px #000;
+}
+.points-gravity-cue {
+  position: absolute;
+  bottom: 5%;
+  right: 5%;
+  display: flex;
+  gap: 1vw;
+}
+.points-gravity-cue i {
+  height: 0.6vh;
+  width: 0.6vh;
+  background: #cdefff;
+  border-radius: 50%;
+  animation: points-float 2s ease-in-out infinite alternate;
+  opacity: 0.55;
+}
+.points-gravity-cue i:nth-child(2) {
+  animation-delay: -0.6s;
+}
+.points-gravity-cue i:nth-child(3) {
+  animation-delay: -1.2s;
+}
+@keyframes points-float {
+  from {
+    transform: translateY(0) rotate(-1deg);
+  }
+  to {
+    transform: translateY(-3vh) rotate(1deg);
+  }
+}
+@keyframes points-bloom {
+  from {
+    transform: scale(0.05);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes points-flower-life {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(2vh);
+  }
+}
+@keyframes points-grow {
+  from {
+    opacity: 0;
+    transform: translateY(6vh) scale(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes points-flower-sway {
+  from {
+    transform: rotate(var(--flower-lean));
+  }
+  to {
+    transform: rotate(calc(var(--flower-lean) + 4deg));
+  }
+}
+@keyframes points-heart-rise {
+  0% {
+    transform: translate(-50%, 0) scale(0.55) rotate(0deg);
+    opacity: 0;
+  }
+  18%,
+  60% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--heart-drift)), var(--heart-rise)) scale(1.12)
+      rotate(var(--heart-tilt));
+    opacity: 0;
+  }
+}

@@ -31,6 +31,7 @@ src-tauri/src (Rust: Twitch・保存・ウィンドウ・ローカルサーバ�
   - `lib.rs`: プラグイン、状態、コマンド、2ウィンドウを組み立てるComposition Root
   - `twitch_auth.rs`: OAuth、トークン更新、Shoutout API
   - `twitch_chat.rs`: Twitchチャット、Raid、クリップ情報の取得
+  - `twitch_moderation.rs`: コメントの識別情報とモデレーション通知の変換
   - `overlay_settings.rs`: オーバーレイ設定の永続化
   - `audience.rs`: 反応ユーザー記録
   - `custom_stamps.rs`、`custom_fonts.rs`: ポータブル素材の管理

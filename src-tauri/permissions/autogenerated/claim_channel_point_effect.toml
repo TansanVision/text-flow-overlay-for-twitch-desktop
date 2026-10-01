@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-claim-channel-point-effect"
+description = "Enables the claim_channel_point_effect command without any pre-configured scope."
+commands.allow = ["claim_channel_point_effect"]
+
+[[permission]]
+identifier = "deny-claim-channel-point-effect"
+description = "Denies the claim_channel_point_effect command without any pre-configured scope."
+commands.deny = ["claim_channel_point_effect"]

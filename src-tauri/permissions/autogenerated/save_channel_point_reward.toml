@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-channel-point-reward"
+description = "Enables the save_channel_point_reward command without any pre-configured scope."
+commands.allow = ["save_channel_point_reward"]
+
+[[permission]]
+identifier = "deny-save-channel-point-reward"
+description = "Denies the save_channel_point_reward command without any pre-configured scope."
+commands.deny = ["save_channel_point_reward"]
