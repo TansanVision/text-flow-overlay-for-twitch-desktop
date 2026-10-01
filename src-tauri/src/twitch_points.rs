@@ -20,6 +20,7 @@ pub enum PointsEffect {
     Hearts,
     Gravity,
     Flower,
+    EmoteFountain,
 }
 
 impl PointsEffect {
@@ -28,6 +29,7 @@ impl PointsEffect {
             Self::Hearts => "ふわふわハート",
             Self::Gravity => "10秒の無重力",
             Self::Flower => "花のじゅうたん",
+            Self::EmoteFountain => "エモート噴水",
         }
     }
 }

@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { EmoteFountain, type FountainStamp } from './emote-fountain';
 import type { PlaybackView } from './use-channel-point-effects';
 import './channel-point-effects.css';
 
@@ -116,13 +117,22 @@ function FloatingHearts() {
   );
 }
 
-export function ChannelPointVisual({ view, paused }: { view?: PlaybackView; paused: boolean }) {
+export function ChannelPointVisual({
+  view,
+  paused,
+  stamps = [],
+}: {
+  view?: PlaybackView;
+  paused: boolean;
+  stamps?: readonly FountainStamp[];
+}) {
   const { t } = useTranslation();
   if (!view || view.phase === 'done') return null;
   return (
     <div className="points-visual" data-paused={paused} aria-hidden="true">
       {view.job.effect === 'flower' && <FlowerBed />}
       {view.job.effect === 'hearts' && <FloatingHearts />}
+      {view.job.effect === 'emoteFountain' && <EmoteFountain stamps={stamps} />}
       {view.job.preview && view.phase === 'active' && view.job.effect === 'gravity' && (
         <div className={`points-preview points-${view.job.effect}`}>
           <span>{t('pointsPreviewComment')}</span>

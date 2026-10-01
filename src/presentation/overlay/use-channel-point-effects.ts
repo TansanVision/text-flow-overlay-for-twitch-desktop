@@ -56,7 +56,8 @@ export function useChannelPointEffects(blocked: boolean) {
             job,
             phase: 'active',
             elapsed: 0,
-            duration: job.effect === 'flower' ? 12_000 : 10_000,
+            duration:
+              job.effect === 'emoteFountain' ? 8000 : job.effect === 'flower' ? 12_000 : 10_000,
             finishing: false,
             acknowledged: false,
             retryAt: 0,

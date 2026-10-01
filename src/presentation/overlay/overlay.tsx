@@ -395,7 +395,12 @@ export function Overlay(): React.JSX.Element {
 
   return (
     <main className="overlay" aria-label="Text Flow Overlay for Twitch">
-      <ChannelPointVisual key={points.view?.job.id} view={points.view} paused={points.paused} />
+      <ChannelPointVisual
+        key={points.view?.job.id}
+        view={points.view}
+        paused={points.paused}
+        stamps={[...customStamps.values()]}
+      />
       {raids[0] && (
         <RaidIntro
           key={`${raids[0].presentation ?? 'raid'}-${raids[0].id}`}

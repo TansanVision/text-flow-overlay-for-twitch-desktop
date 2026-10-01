@@ -39,6 +39,13 @@ it('allows previews without authorization and disables reward creation', async (
   );
   await act(async () => preview?.click());
   expect(invoke).toHaveBeenCalledWith('preview_channel_point_effect', { effect: 'hearts' });
+  for (const [label, effect] of [['エモート噴水', 'emoteFountain']]) {
+    const form = [...container.querySelectorAll('form')].find(
+      (candidate) => candidate.querySelector('h3')?.textContent === label,
+    );
+    await act(async () => form?.querySelector<HTMLButtonElement>('button[type="button"]')?.click());
+    expect(invoke).toHaveBeenCalledWith('preview_channel_point_effect', { effect });
+  }
   expect(
     vi.mocked(invoke).mock.calls.some(([command]) => command === 'save_channel_point_reward'),
   ).toBe(false);

@@ -117,3 +117,25 @@ it('cleans up timers on unmount', async () => {
   await advance(60_000);
   expect(vi.mocked(invoke).mock.calls).toHaveLength(calls);
 });
+
+it.each([false, true])(
+  'finishes the fountain after eight seconds (preview=%s)',
+  async (preview) => {
+    if (job) {
+      job.effect = 'emoteFountain';
+      job.preview = preview;
+    }
+    await act(async () => root.render(<Harness />));
+    await advance(7900);
+    expect(result.view?.phase).toBe('active');
+    expect(
+      vi.mocked(invoke).mock.calls.some(([command]) => command === 'finish_channel_point_effect'),
+    ).toBe(false);
+    await advance(100);
+    expect(result.view).toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith('finish_channel_point_effect', {
+      id: 'redemption',
+      success: true,
+    });
+  },
+);
