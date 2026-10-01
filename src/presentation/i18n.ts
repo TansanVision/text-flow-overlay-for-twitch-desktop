@@ -14,6 +14,9 @@ const ja = {
   pointsHearts: 'ふわふわハート',
   pointsEmoteFountain: 'エモート噴水',
   pointsFireworks: 'お祝い花火',
+  pointsBubbles: 'シャボン玉',
+  pointsBubblesHelp:
+    '10秒間、大小のシャボン玉が画面下からふわふわ浮かびます。透けた虹色の膜がきらめき、最後に小さな光の粒になって弾けます。',
   pointsFireworksHelp:
     '10秒間、左右から色とりどりの花火が上がり、最後に中央で金色の大輪が開きます。光の粒がゆっくり落ちて消えます。',
   pointsEmoteFountainHelp:
@@ -228,6 +231,9 @@ const en: Record<keyof typeof ja, string> = {
   pointsHearts: 'Floating hearts',
   pointsEmoteFountain: 'Emote fountain',
   pointsFireworks: 'Celebration fireworks',
+  pointsBubbles: 'Soap bubbles',
+  pointsBubblesHelp:
+    'For 10 seconds, bubbles of different sizes drift up from the bottom. Their translucent rainbow surfaces shimmer before popping into tiny sparkles.',
   pointsFireworksHelp:
     'For 10 seconds, colorful fireworks launch from both sides, ending with a large golden burst in the center. Glowing embers gently fall and fade.',
   pointsEmoteFountainHelp:

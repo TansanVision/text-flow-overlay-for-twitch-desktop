@@ -1,0 +1,113 @@
+.points-soap-bubbles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.points-bubble-definitions {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.points-bubble-rise {
+  position: absolute;
+  bottom: calc(-1 * var(--bubble-size));
+  width: var(--bubble-size);
+  height: var(--bubble-size);
+  margin-left: calc(-0.5 * var(--bubble-size));
+  animation: points-bubble-rise var(--bubble-duration) linear var(--bubble-delay) both;
+}
+
+.points-bubble-sway {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: points-bubble-sway var(--bubble-duration) ease-in-out var(--bubble-delay) both;
+}
+
+.points-bubble-film,
+.points-bubble-pop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.points-bubble-film {
+  filter: drop-shadow(0 0 0.25vmin #b8e9ff55);
+  animation: points-bubble-film var(--bubble-duration) linear var(--bubble-delay) both;
+}
+
+.points-bubble-pop {
+  animation: points-bubble-pop var(--bubble-duration) linear var(--bubble-delay) both;
+}
+
+@keyframes points-bubble-rise {
+  0% {
+    transform: translateY(0);
+  }
+  85%,
+  100% {
+    transform: translateY(var(--bubble-rise));
+  }
+}
+
+@keyframes points-bubble-sway {
+  0%,
+  50%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(var(--bubble-sway));
+  }
+  75% {
+    transform: translateX(calc(-1 * var(--bubble-sway)));
+  }
+}
+
+@keyframes points-bubble-film {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  10% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  45% {
+    opacity: 0.7;
+    transform: scale(0.96, 1.04);
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(1.03, 0.97);
+  }
+  84% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  89%,
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes points-bubble-pop {
+  0%,
+  84% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  89% {
+    opacity: 0.85;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}

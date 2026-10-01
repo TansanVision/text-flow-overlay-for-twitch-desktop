@@ -70,7 +70,7 @@ it('plays hearts immediately without decorating comments and acknowledges only o
     vi.mocked(invoke).mock.calls.filter(([command]) => command === 'finish_channel_point_effect'),
   ).toHaveLength(1);
 });
-it.each(['hearts', 'gravity', 'fireworks'] as const)(
+it.each(['hearts', 'gravity', 'fireworks', 'bubbles'] as const)(
   'pauses %s during a raid and resumes its ten-second window',
   async (effect) => {
     if (job) job.effect = effect;

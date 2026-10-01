@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CelebrationFireworks } from './celebration-fireworks';
 import { EmoteFountain, type FountainStamp } from './emote-fountain';
+import { SoapBubbles } from './soap-bubbles';
 import type { PlaybackView } from './use-channel-point-effects';
 import './channel-point-effects.css';
 
@@ -135,6 +136,7 @@ export function ChannelPointVisual({
       {view.job.effect === 'hearts' && <FloatingHearts />}
       {view.job.effect === 'emoteFountain' && <EmoteFountain stamps={stamps} />}
       {view.job.effect === 'fireworks' && <CelebrationFireworks />}
+      {view.job.effect === 'bubbles' && <SoapBubbles />}
       {view.job.preview && view.phase === 'active' && view.job.effect === 'gravity' && (
         <div className={`points-preview points-${view.job.effect}`}>
           <span>{t('pointsPreviewComment')}</span>
