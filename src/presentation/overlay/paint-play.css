@@ -1,0 +1,81 @@
+.points-paint-play {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.points-paint-splash {
+  position: absolute;
+  /* The splat is centered at (80, 70) in the SVG; the remaining space holds drips. */
+  aspect-ratio: 160 / 180;
+  transform-origin: 50% 38.89%;
+  animation: points-paint-splash 3.1s linear var(--paint-delay) both;
+}
+
+.points-paint-splash svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.points-paint-drip {
+  transform-box: fill-box;
+  transform-origin: center top;
+  animation: points-paint-drip 3.1s ease-out var(--paint-delay) both;
+}
+
+.points-paint-droplets {
+  transform-box: view-box;
+  transform-origin: 80px 70px;
+  animation: points-paint-droplets 3.1s ease-out var(--paint-delay) both;
+}
+
+@keyframes points-paint-splash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -38.89%) scale(0.08);
+  }
+  4% {
+    opacity: 0.92;
+    transform: translate(-50%, -38.89%) scale(1.12, 0.9);
+  }
+  9% {
+    opacity: 0.92;
+    transform: translate(-50%, -38.89%) scale(0.96, 1.04);
+  }
+  15%,
+  70% {
+    opacity: 0.92;
+    transform: translate(-50%, -38.89%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -34%) scale(0.98);
+  }
+}
+
+@keyframes points-paint-drip {
+  0%,
+  12% {
+    transform: scaleY(0);
+  }
+  80%,
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes points-paint-droplets {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  5% {
+    opacity: 1;
+  }
+  16%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

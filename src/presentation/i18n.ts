@@ -15,6 +15,9 @@ const ja = {
   pointsEmoteFountain: 'エモート噴水',
   pointsFireworks: 'お祝い花火',
   pointsBubbles: 'シャボン玉',
+  pointsPaint: 'ペイント遊び',
+  pointsPaintHelp:
+    '10秒間、6色の絵の具が画面のあちこちに飛び散ります。ぷるんと広がって少し垂れ、順番に薄くなって消えます。',
   pointsBubblesHelp:
     '10秒間、大小のシャボン玉が画面下からふわふわ浮かびます。透けた虹色の膜がきらめき、最後に小さな光の粒になって弾けます。',
   pointsFireworksHelp:
@@ -232,6 +235,9 @@ const en: Record<keyof typeof ja, string> = {
   pointsEmoteFountain: 'Emote fountain',
   pointsFireworks: 'Celebration fireworks',
   pointsBubbles: 'Soap bubbles',
+  pointsPaint: 'Paint play',
+  pointsPaintHelp:
+    'For 10 seconds, paint in six colors splashes across the screen. Each splat spreads with a bounce, drips a little, and gradually fades away.',
   pointsBubblesHelp:
     'For 10 seconds, bubbles of different sizes drift up from the bottom. Their translucent rainbow surfaces shimmer before popping into tiny sparkles.',
   pointsFireworksHelp:

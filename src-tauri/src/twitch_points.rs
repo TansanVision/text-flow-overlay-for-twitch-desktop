@@ -23,6 +23,7 @@ pub enum PointsEffect {
     EmoteFountain,
     Fireworks,
     Bubbles,
+    Paint,
 }
 
 impl PointsEffect {
@@ -34,6 +35,7 @@ impl PointsEffect {
             Self::EmoteFountain => "エモート噴水",
             Self::Fireworks => "お祝い花火",
             Self::Bubbles => "シャボン玉",
+            Self::Paint => "ペイント遊び",
         }
     }
 }
