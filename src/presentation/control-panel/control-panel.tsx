@@ -14,8 +14,10 @@ import {
 import type { Language } from '../i18n';
 import { ChannelPointsPanel } from './channel-points-panel';
 import { ClipPlaybackControls } from './clip-playback-controls';
+import { ControlNavigation, type ControlPage, controlPages } from './control-navigation';
 import { TwitchConnectionStatus } from './twitch-connection-status';
 import './style.css';
+import './layout.css';
 
 type DeviceAuthorization = {
   expiresIn: number;
@@ -106,6 +108,7 @@ const SHOUTOUT_TARGET_COOLDOWN_MS = 60 * 60 * 1000;
 
 export function ControlPanel(): React.JSX.Element {
   const { t, i18n } = useTranslation();
+  const [activePage, setActivePage] = useState<ControlPage>('live');
   const [authorization, setAuthorization] = useState<DeviceAuthorization>();
   const [connectedUser, setConnectedUser] = useState<ConnectedUser>();
   const [error, setError] = useState<string>();
@@ -723,663 +726,730 @@ export function ControlPanel(): React.JSX.Element {
       .finally(() => setIsLoadingExternalEmotes(false));
   }, []);
 
+  const selectedPage = controlPages.find((page) => page.id === activePage) ?? controlPages[0];
+  const selectPage = (page: ControlPage) => {
+    setActivePage(page);
+    document.querySelector('.workspace-heading')?.scrollIntoView?.({ block: 'start' });
+  };
   return (
-    <main className="control-panel">
-      <header>
-        <div>
-          <p className="eyebrow">Desktop control panel</p>
-          <h1>Text Flow Overlay for Twitch</h1>
-          <p className="unofficial-notice">{t('unofficialNotice')}</p>
-        </div>
-        <label className="language-selector">
-          <span>{t('language')}</span>
-          <select
-            value={overlaySettings.language}
-            onChange={(event) => void changeLanguage(event.target.value as Language)}
-          >
-            <option value="ja">日本語</option>
-            <option value="en">English</option>
-          </select>
-        </label>
-      </header>
-
-      <section className="panel" aria-labelledby="connection-title">
-        <h2 id="connection-title">{t('connection')}</h2>
-        {isRestoring && <p className="connection-status">{t('restoring')}</p>}
-        {!isRestoring && !connectedUser && !authorization && (
-          <button type="button" onClick={() => void startAuthorization()} disabled={isStarting}>
-            {isStarting ? t('connecting') : t('connect')}
-          </button>
-        )}
-
-        {authorization && (
-          <div className="authorization" role="status">
-            <p>{t('deviceInstruction')}</p>
-            <strong>{authorization.userCode}</strong>
-            <button type="button" onClick={() => void openUrl(authorization.verificationUri)}>
-              {t('openAuth')}
-            </button>
-          </div>
-        )}
-
-        {connectedUser && (
-          <div className="authorization">
-            {connectedUser.profileImageUrl && (
-              <img className="connected-user-avatar" src={connectedUser.profileImageUrl} alt="" />
-            )}
-            <div className="connected-user-details">
-              <p className="success">{t('connected', { name: connectedUser.displayName })}</p>
-              <small>@{connectedUser.login}</small>
-            </div>
-            <button type="button" onClick={() => void logout()}>
-              {t('logout')}
-            </button>
-          </div>
-        )}
-        {!isRestoring && <TwitchConnectionStatus onReauthorize={startAuthorization} />}
-        {error && <p className="error">{error}</p>}
-      </section>
-
-      <ChannelPointsPanel
-        onAuthorize={() => startAuthorization(true)}
-        authorizationBusy={isRestoring || isStarting || Boolean(authorization)}
+    <div className="control-shell">
+      <ControlNavigation
+        activePage={activePage}
+        onSelect={selectPage}
+        pendingRaids={manualRaids.length}
       />
-      <section className="panel" aria-labelledby="twitch-operations-title">
-        <h2 id="twitch-operations-title">{t('twitchOperations')}</h2>
-        <div className="twitch-operation-block">
-          <h3>{t('commercial')}</h3>
-          <p className="help-text">{t('commercialHelp')}</p>
-          <div className="button-row commercial-buttons">
-            {[30, 60, 90, 180].map((length) => (
+      <main className="control-panel">
+        <header className="workspace-heading">
+          <div>
+            <h1>{t(selectedPage.label)}</h1>
+            <p className="workspace-description">{t(selectedPage.help)}</p>
+          </div>
+          <label className="language-selector">
+            <span>{t('language')}</span>
+            <select
+              value={overlaySettings.language}
+              onChange={(event) => void changeLanguage(event.target.value as Language)}
+            >
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </header>
+        <section className="panel connection-summary" aria-labelledby="connection-title">
+          <h2 id="connection-title">{t('connection')}</h2>
+          {isRestoring && <p className="connection-status">{t('restoring')}</p>}
+          {!isRestoring && !connectedUser && !authorization && (
+            <button type="button" onClick={() => void startAuthorization()} disabled={isStarting}>
+              {isStarting ? t('connecting') : t('connect')}
+            </button>
+          )}
+
+          {authorization && (
+            <div className="authorization" role="status">
+              <p>{t('deviceInstruction')}</p>
+              <strong>{authorization.userCode}</strong>
+              <button type="button" onClick={() => void openUrl(authorization.verificationUri)}>
+                {t('openAuth')}
+              </button>
+            </div>
+          )}
+
+          {connectedUser && (
+            <div className="authorization">
+              {connectedUser.profileImageUrl && (
+                <img className="connected-user-avatar" src={connectedUser.profileImageUrl} alt="" />
+              )}
+              <div className="connected-user-details">
+                <p className="success">{t('connected', { name: connectedUser.displayName })}</p>
+                <small>@{connectedUser.login}</small>
+              </div>
+              <button type="button" onClick={() => void logout()}>
+                {t('logout')}
+              </button>
+            </div>
+          )}
+          {!isRestoring && <TwitchConnectionStatus onReauthorize={startAuthorization} />}
+        </section>
+        {error && (
+          <p className="error workspace-alert" role="alert">
+            {error}
+          </p>
+        )}
+        {activePage !== 'live' && manualRaids.length > 0 && (
+          <div className="raid-attention" role="status">
+            <span>{t('pendingRaids', { count: manualRaids.length })}</span>
+            <button type="button" onClick={() => selectPage('live')}>
+              {t('navLive')}
+            </button>
+          </div>
+        )}
+        <ClipPlaybackControls />
+        <div id="control-page-live" className="control-page" hidden={activePage !== 'live'}>
+          <section className="panel" aria-labelledby="overlay-controls-title">
+            <h2 id="overlay-controls-title">{t('overlay')}</h2>
+            <p className="overlay-state" data-visible={overlayWindowVisible}>
+              {t(overlayWindowVisible ? 'onDesktop' : 'offscreen')}
+            </p>
+            <div className="button-row">
               <button
                 type="button"
-                key={length}
-                onClick={() => void startCommercial(length)}
-                disabled={
-                  !connectedUser ||
-                  commercialInProgress !== undefined ||
-                  commercialCooldownSeconds > 0
+                onClick={() => void changeOverlayWindowVisibility(true)}
+                disabled={overlayWindowVisible}
+              >
+                {t('restoreDesktop')}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void changeOverlayWindowVisibility(false)}
+                disabled={!overlayWindowVisible}
+              >
+                {t('moveOffscreen')}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void sendTestComment()}
+                disabled={!testComment.trim()}
+              >
+                {t('quickTestComment')}
+              </button>
+            </div>
+            <p className="help-text">{t('offscreenHelp')}</p>
+          </section>
+          {manualRaids.length > 0 && (
+            <section className="panel manual-raid-panel" aria-labelledby="manual-raid-title">
+              <h2 id="manual-raid-title">{t('manualRaid')}</h2>
+              <p className="help-text">{t('manualRaidHelp')}</p>
+              {manualRaids.map((raid) => {
+                const cooldownUntil = raid.broadcasterUserId
+                  ? Math.max(
+                      shoutoutCooldowns.globalUntil,
+                      shoutoutCooldowns.targets[raid.broadcasterUserId] ?? 0,
+                    )
+                  : shoutoutCooldowns.globalUntil;
+                const cooldownSeconds = Math.max(
+                  Math.ceil((cooldownUntil - shoutoutClock) / 1000),
+                  0,
+                );
+                return (
+                  <article className="manual-raid-card" key={raid.id}>
+                    <button
+                      className="manual-raid-close"
+                      type="button"
+                      aria-label={t('closeManualRaid', { name: raid.displayName })}
+                      title={t('closeManualRaid', { name: raid.displayName })}
+                      onClick={() => closeManualRaid(raid.id)}
+                    >
+                      ×
+                    </button>
+                    <div className="manual-raid-user">
+                      {raid.profileImageUrl && <img src={raid.profileImageUrl} alt="" />}
+                      <div className="manual-raid-user-info">
+                        <strong>{raid.displayName}</strong>
+                        <small>
+                          @{raid.login} · {t('viewersRaid', { count: raid.viewerCount })}
+                        </small>
+                      </div>
+                    </div>
+                    <div className="manual-raid-actions">
+                      {raid.clipsEnabled && raid.clips.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => void playManualRaidClips(raid)}
+                          disabled={raid.clipsInProgress || raid.clipsCompleted}
+                        >
+                          {raid.clipsCompleted
+                            ? t('raidClipsPlayed')
+                            : raid.clipsInProgress
+                              ? t('playingRaidClips')
+                              : t('playRaidClips', { count: raid.clips.length })}
+                        </button>
+                      )}
+                      {raid.clipsEnabled && raid.clips.length === 0 && (
+                        <span className="manual-raid-status">{t('noRaidClips')}</span>
+                      )}
+                      {raid.shoutoutEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => void sendManualShoutout(raid)}
+                          disabled={
+                            raid.shoutoutCompleted ||
+                            !raid.broadcasterUserId ||
+                            shoutoutInProgress !== undefined ||
+                            cooldownSeconds > 0
+                          }
+                        >
+                          {raid.shoutoutCompleted
+                            ? t('shoutoutSent')
+                            : shoutoutInProgress === raid.id
+                              ? t('sending')
+                              : cooldownSeconds > 0
+                                ? t('shoutoutCooldownButton', { seconds: cooldownSeconds })
+                                : t('shoutout')}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+          )}
+          <details className="panel" aria-labelledby="twitch-operations-title">
+            <summary id="twitch-operations-title">{t('twitchOperations')}</summary>
+            <div className="twitch-operation-block">
+              <h3>{t('commercial')}</h3>
+              <p className="help-text">{t('commercialHelp')}</p>
+              <div className="button-row commercial-buttons">
+                {[30, 60, 90, 180].map((length) => (
+                  <button
+                    type="button"
+                    key={length}
+                    onClick={() => void startCommercial(length)}
+                    disabled={
+                      !connectedUser ||
+                      commercialInProgress !== undefined ||
+                      commercialCooldownSeconds > 0
+                    }
+                  >
+                    {commercialInProgress === length
+                      ? t('startingCommercial')
+                      : t('startCommercial', { seconds: length })}
+                  </button>
+                ))}
+              </div>
+              {!connectedUser && <p className="help-text">{t('commercialLoginRequired')}</p>}
+              {commercialCooldownSeconds > 0 && (
+                <p className="connection-status" role="status">
+                  {t('commercialCooldown', { seconds: commercialCooldownSeconds })}
+                </p>
+              )}
+              {commercialResult && (
+                <p className="success" role="status">
+                  {t('commercialStarted', {
+                    seconds: commercialResult.length,
+                    retryAfter: commercialResult.retryAfter,
+                  })}
+                </p>
+              )}
+              {commercialResult?.message && <p className="help-text">{commercialResult.message}</p>}
+            </div>
+
+            <div className="twitch-operation-block">
+              <div className="button-row">
+                <button type="button" onClick={openTwitchDashboard}>
+                  {t('openCreatorDashboard')}
+                </button>
+              </div>
+            </div>
+            {commercialError && <p className="error">{commercialError}</p>}
+          </details>
+        </div>
+        <div id="control-page-comments" className="control-page" hidden={activePage !== 'comments'}>
+          <section className="panel" aria-labelledby="overlay-settings-title">
+            <h2 id="overlay-settings-title">{t('commentSettings')}</h2>
+            <div className="settings-grid">
+              <label htmlFor="default-size">{t('defaultSize')}</label>
+              <select
+                id="default-size"
+                value={overlaySettings.defaultSize}
+                onChange={(event) =>
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    defaultSize: event.target.value as OverlaySettings['defaultSize'],
+                  }))
                 }
               >
-                {commercialInProgress === length
-                  ? t('startingCommercial')
-                  : t('startCommercial', { seconds: length })}
-              </button>
-            ))}
-          </div>
-          {!connectedUser && <p className="help-text">{t('commercialLoginRequired')}</p>}
-          {commercialCooldownSeconds > 0 && (
-            <p className="connection-status" role="status">
-              {t('commercialCooldown', { seconds: commercialCooldownSeconds })}
-            </p>
-          )}
-          {commercialResult && (
-            <p className="success" role="status">
-              {t('commercialStarted', {
-                seconds: commercialResult.length,
-                retryAfter: commercialResult.retryAfter,
-              })}
-            </p>
-          )}
-          {commercialResult?.message && <p className="help-text">{commercialResult.message}</p>}
-        </div>
-
-        <div className="twitch-operation-block">
-          <div className="button-row">
-            <button type="button" onClick={openTwitchDashboard}>
-              {t('openCreatorDashboard')}
-            </button>
-          </div>
-        </div>
-        {commercialError && <p className="error">{commercialError}</p>}
-      </section>
-
-      <ClipPlaybackControls />
-
-      <section className="panel" aria-labelledby="external-emotes-title">
-        <h2 id="external-emotes-title">{t('externalEmotes')}</h2>
-        {externalEmoteStatus?.providers.map((status) => (
-          <p key={status.provider} className={status.error ? 'provider-error' : undefined}>
-            {status.provider}:{' '}
-            {status.error
-              ? t('loadFailed', { error: status.error })
-              : t('items', { count: status.count })}
-          </p>
-        ))}
-        <p className="help-text">
-          {t('total', { count: externalEmoteStatus?.emotes.length ?? 0 })}
-        </p>
-        <button
-          type="button"
-          onClick={() => void loadExternalEmotes()}
-          disabled={isLoadingExternalEmotes}
-        >
-          {isLoadingExternalEmotes ? t('loading') : t('reloadExternal')}
-        </button>
-      </section>
-
-      <section className="panel" aria-labelledby="overlay-settings-title">
-        <h2 id="overlay-settings-title">{t('commentSettings')}</h2>
-        <div className="settings-grid">
-          <label htmlFor="default-size">{t('defaultSize')}</label>
-          <select
-            id="default-size"
-            value={overlaySettings.defaultSize}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                defaultSize: event.target.value as OverlaySettings['defaultSize'],
-              }))
-            }
-          >
-            <option value="small">{t('small')}</option>
-            <option value="medium">{t('medium')}</option>
-            <option value="big">{t('big')}</option>
-          </select>
-          <label htmlFor="comment-duration">{t('durationSeconds')}</label>
-          <input
-            id="comment-duration"
-            type="number"
-            min="1"
-            max="30"
-            step="0.5"
-            value={overlaySettings.commentDurationSeconds}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                commentDurationSeconds: Number(event.target.value),
-              }))
-            }
-          />
-          <label htmlFor="comment-font">{t('commentFont')}</label>
-          <select
-            id="comment-font"
-            value={overlaySettings.commentFont}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                commentFont: event.target.value as CommentFont,
-              }))
-            }
-          >
-            <optgroup label={t('standardFonts')}>
-              {commentFonts.map((font) => (
-                <option key={font} value={font}>
-                  {t(`commentFont_${font}`)}
-                </option>
-              ))}
-            </optgroup>
-            {customFonts.length > 0 && (
-              <optgroup label={t('customFonts')}>
-                {customFonts.map((font) => (
-                  <option key={font.id} value={font.id}>
-                    {font.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </div>
-        <p
-          className="font-preview"
-          style={{
-            fontFamily: getCommentFontFamily(overlaySettings.commentFont, customFontFamilies),
-          }}
-        >
-          {t('fontPreview')}
-        </p>
-        <p className="help-text">{t('customFontHelp', { count: customFonts.length })}</p>
-        {customFontErrors.map((fontError) => (
-          <p className="provider-error" key={fontError}>
-            {t('customFontLoadFailed', { error: fontError })}
-          </p>
-        ))}
-        <div className="button-row">
-          <button type="button" className="secondary-button" onClick={openCustomFontDirectory}>
-            {t('openFontFolder')}
-          </button>
-          <button type="button" className="secondary-button" onClick={reloadCustomFonts}>
-            {t('reloadFonts')}
-          </button>
-        </div>
-        <button type="button" onClick={() => void saveSettings()}>
-          {t('saveSettings')}
-        </button>
-        {settingsSaved && <span className="saved-message">{t('saved')}</span>}
-      </section>
-
-      <section className="panel" aria-labelledby="effect-settings-title">
-        <h2 id="effect-settings-title">{t('effectSettings')}</h2>
-        <div className="effect-buttons">
-          {['sakura', 'snow', 'balloons', 'kamifubuki', 'rain', 'maruta', 'chikuwa', 'marutai'].map(
-            (effect) => (
-              <label key={effect} className="effect-toggle">
-                <input
-                  type="checkbox"
-                  checked={overlaySettings.enabledEffects.includes(effect)}
-                  onChange={(event) =>
-                    setOverlaySettings((current) => ({
-                      ...current,
-                      enabledEffects: event.target.checked
-                        ? [...current.enabledEffects, effect]
-                        : current.enabledEffects.filter((value) => value !== effect),
-                    }))
-                  }
-                />
-                {effect}
-              </label>
-            ),
-          )}
-        </div>
-        <button type="button" onClick={() => void saveSettings()}>
-          {t('saveEffects')}
-        </button>
-        {settingsSaved && <span className="saved-message">{t('saved')}</span>}
-      </section>
-
-      <section className="panel" aria-labelledby="raid-settings-title">
-        <h2 id="raid-settings-title">{t('raidSettings')}</h2>
-        <p className="help-text">{t('raidHelp')}</p>
-        <div className="settings-grid">
-          <label htmlFor="raid-introduction-mode">{t('introductionMode')}</label>
-          <select
-            id="raid-introduction-mode"
-            value={overlaySettings.raidIntroductionMode}
-            onChange={(event) =>
-              void changeRaidIntroductionMode(event.target.value as 'automatic' | 'manual')
-            }
-          >
-            <option value="automatic">{t('automatic')}</option>
-            <option value="manual">{t('manual')}</option>
-          </select>
-          <label htmlFor="raid-intro-seconds">{t('introSeconds')}</label>
-          <input
-            id="raid-intro-seconds"
-            type="number"
-            min="1"
-            max="60"
-            value={overlaySettings.raidIntroSeconds}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                raidIntroSeconds: Number(event.target.value),
-              }))
-            }
-          />
-          <label htmlFor="raid-clips-enabled">{t('clipPlayback')}</label>
-          <input
-            id="raid-clips-enabled"
-            type="checkbox"
-            checked={overlaySettings.raidClipsEnabled}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                raidClipsEnabled: event.target.checked,
-              }))
-            }
-          />
-          <label htmlFor="raid-clip-count">{t('clipCount')}</label>
-          <select
-            id="raid-clip-count"
-            value={overlaySettings.raidClipCount}
-            onChange={(event) =>
-              setOverlaySettings((current) => ({
-                ...current,
-                raidClipCount: Number(event.target.value),
-              }))
-            }
-          >
-            {[1, 2, 3, 4, 5].map((count) => (
-              <option key={count} value={count}>
-                {t('items', { count })}
-              </option>
-            ))}
-          </select>
-          <label htmlFor="raid-auto-shoutout">
-            {overlaySettings.raidIntroductionMode === 'manual'
-              ? t('manualShoutoutAction')
-              : t('autoShoutout')}
-          </label>
-          <input
-            id="raid-auto-shoutout"
-            type="checkbox"
-            checked={overlaySettings.raidAutoShoutout}
-            onChange={(event) => void changeRaidAutoShoutout(event.target.checked)}
-          />
-        </div>
-        <p className="help-text">{t('clipHelp')}</p>
-        <button type="button" onClick={() => void saveSettings()}>
-          {t('saveRaid')}
-        </button>
-        {settingsSaved && <span className="saved-message">{t('saved')}</span>}
-        {raidPhaseStatus && (
-          <p className="help-text" role="status">
-            {t('raidPhase', { phase: raidPhaseStatus.phase })}
-          </p>
-        )}
-        {shoutoutResult && (
-          <p className={shoutoutResult.success ? 'success' : 'error'} role="status">
-            {shoutoutResult.success
-              ? t('shoutoutSucceeded')
-              : t('shoutoutFailed', { error: shoutoutResult.error ?? t('unknownError') })}
-          </p>
-        )}
-      </section>
-
-      {manualRaids.length > 0 && (
-        <section className="panel manual-raid-panel" aria-labelledby="manual-raid-title">
-          <h2 id="manual-raid-title">{t('manualRaid')}</h2>
-          <p className="help-text">{t('manualRaidHelp')}</p>
-          {manualRaids.map((raid) => {
-            const cooldownUntil = raid.broadcasterUserId
-              ? Math.max(
-                  shoutoutCooldowns.globalUntil,
-                  shoutoutCooldowns.targets[raid.broadcasterUserId] ?? 0,
-                )
-              : shoutoutCooldowns.globalUntil;
-            const cooldownSeconds = Math.max(Math.ceil((cooldownUntil - shoutoutClock) / 1000), 0);
-            return (
-              <article className="manual-raid-card" key={raid.id}>
-                <button
-                  className="manual-raid-close"
-                  type="button"
-                  aria-label={t('closeManualRaid', { name: raid.displayName })}
-                  title={t('closeManualRaid', { name: raid.displayName })}
-                  onClick={() => closeManualRaid(raid.id)}
-                >
-                  ×
-                </button>
-                <div className="manual-raid-user">
-                  {raid.profileImageUrl && <img src={raid.profileImageUrl} alt="" />}
-                  <div className="manual-raid-user-info">
-                    <strong>{raid.displayName}</strong>
-                    <small>
-                      @{raid.login} · {t('viewersRaid', { count: raid.viewerCount })}
-                    </small>
-                  </div>
-                </div>
-                <div className="manual-raid-actions">
-                  {raid.clipsEnabled && raid.clips.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => void playManualRaidClips(raid)}
-                      disabled={raid.clipsInProgress || raid.clipsCompleted}
-                    >
-                      {raid.clipsCompleted
-                        ? t('raidClipsPlayed')
-                        : raid.clipsInProgress
-                          ? t('playingRaidClips')
-                          : t('playRaidClips', { count: raid.clips.length })}
-                    </button>
-                  )}
-                  {raid.clipsEnabled && raid.clips.length === 0 && (
-                    <span className="manual-raid-status">{t('noRaidClips')}</span>
-                  )}
-                  {raid.shoutoutEnabled && (
-                    <button
-                      type="button"
-                      onClick={() => void sendManualShoutout(raid)}
-                      disabled={
-                        raid.shoutoutCompleted ||
-                        !raid.broadcasterUserId ||
-                        shoutoutInProgress !== undefined ||
-                        cooldownSeconds > 0
-                      }
-                    >
-                      {raid.shoutoutCompleted
-                        ? t('shoutoutSent')
-                        : shoutoutInProgress === raid.id
-                          ? t('sending')
-                          : cooldownSeconds > 0
-                            ? t('shoutoutCooldownButton', { seconds: cooldownSeconds })
-                            : t('shoutout')}
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </section>
-      )}
-
-      <section className="panel" aria-labelledby="custom-stamps-title">
-        <h2 id="custom-stamps-title">{t('customStamps')}</h2>
-        <p>{t('loaded', { count: customStampCount })}</p>
-        <p className="help-text">{t('stampHelp')}</p>
-        <div className="button-row">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void openCustomStampDirectory()}
-            disabled={!stampDirectoryPath}
-          >
-            {t('openImageFolder')}
-          </button>
-          <button type="button" onClick={() => void reloadCustomStamps()}>
-            {t('reloadImages')}
-          </button>
-        </div>
-        <div className="stamp-editor">
-          {stampDefinitions.map((definition) => (
-            <div className="stamp-row" key={definition.id}>
+                <option value="small">{t('small')}</option>
+                <option value="medium">{t('medium')}</option>
+                <option value="big">{t('big')}</option>
+              </select>
+              <label htmlFor="comment-duration">{t('durationSeconds')}</label>
               <input
-                aria-label={t('commandName')}
-                placeholder={t('commandName')}
-                value={definition.commandName}
+                id="comment-duration"
+                type="number"
+                min="1"
+                max="30"
+                step="0.5"
+                value={overlaySettings.commentDurationSeconds}
                 onChange={(event) =>
-                  setStampDefinitions((current) =>
-                    current.map((item) =>
-                      item.id === definition.id
-                        ? { ...item, commandName: event.target.value }
-                        : item,
-                    ),
-                  )
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    commentDurationSeconds: Number(event.target.value),
+                  }))
                 }
               />
+              <label htmlFor="comment-font">{t('commentFont')}</label>
               <select
-                aria-label={t('imageFile')}
-                value={definition.fileName}
+                id="comment-font"
+                value={overlaySettings.commentFont}
                 onChange={(event) =>
-                  setStampDefinitions((current) =>
-                    current.map((item) =>
-                      item.id === definition.id ? { ...item, fileName: event.target.value } : item,
-                    ),
-                  )
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    commentFont: event.target.value as CommentFont,
+                  }))
                 }
               >
-                <option value="">{t('selectImage')}</option>
-                {stampImageFiles.map((fileName) => (
-                  <option key={fileName} value={fileName}>
-                    {fileName}
+                <optgroup label={t('standardFonts')}>
+                  {commentFonts.map((font) => (
+                    <option key={font} value={font}>
+                      {t(`commentFont_${font}`)}
+                    </option>
+                  ))}
+                </optgroup>
+                {customFonts.length > 0 && (
+                  <optgroup label={t('customFonts')}>
+                    {customFonts.map((font) => (
+                      <option key={font.id} value={font.id}>
+                        {font.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            <p
+              className="font-preview"
+              style={{
+                fontFamily: getCommentFontFamily(overlaySettings.commentFont, customFontFamilies),
+              }}
+            >
+              {t('fontPreview')}
+            </p>
+            <details className="disclosure">
+              <summary>{t('customFonts')}</summary>
+              <p className="help-text">{t('customFontHelp', { count: customFonts.length })}</p>
+              {customFontErrors.map((fontError) => (
+                <p className="provider-error" key={fontError}>
+                  {t('customFontLoadFailed', { error: fontError })}
+                </p>
+              ))}
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={openCustomFontDirectory}
+                >
+                  {t('openFontFolder')}
+                </button>
+                <button type="button" className="secondary-button" onClick={reloadCustomFonts}>
+                  {t('reloadFonts')}
+                </button>
+              </div>
+            </details>
+            <button type="button" onClick={() => void saveSettings()}>
+              {t('saveSettings')}
+            </button>
+            {settingsSaved && <span className="saved-message">{t('saved')}</span>}
+          </section>
+          <details className="panel" aria-labelledby="effect-settings-title">
+            <summary id="effect-settings-title">{t('effectSettings')}</summary>
+            <div className="effect-buttons">
+              {[
+                'sakura',
+                'snow',
+                'balloons',
+                'kamifubuki',
+                'rain',
+                'maruta',
+                'chikuwa',
+                'marutai',
+              ].map((effect) => (
+                <label key={effect} className="effect-toggle">
+                  <input
+                    type="checkbox"
+                    checked={overlaySettings.enabledEffects.includes(effect)}
+                    onChange={(event) =>
+                      setOverlaySettings((current) => ({
+                        ...current,
+                        enabledEffects: event.target.checked
+                          ? [...current.enabledEffects, effect]
+                          : current.enabledEffects.filter((value) => value !== effect),
+                      }))
+                    }
+                  />
+                  {effect}
+                </label>
+              ))}
+            </div>
+            <button type="button" onClick={() => void saveSettings()}>
+              {t('saveEffects')}
+            </button>
+            {settingsSaved && <span className="saved-message">{t('saved')}</span>}
+          </details>
+        </div>
+        <div id="control-page-raid" className="control-page" hidden={activePage !== 'raid'}>
+          <section className="panel" aria-labelledby="raid-settings-title">
+            <h2 id="raid-settings-title">{t('raidSettings')}</h2>
+            <p className="help-text">{t('raidHelp')}</p>
+            <div className="settings-grid">
+              <label htmlFor="raid-introduction-mode">{t('introductionMode')}</label>
+              <select
+                id="raid-introduction-mode"
+                value={overlaySettings.raidIntroductionMode}
+                onChange={(event) =>
+                  void changeRaidIntroductionMode(event.target.value as 'automatic' | 'manual')
+                }
+              >
+                <option value="automatic">{t('automatic')}</option>
+                <option value="manual">{t('manual')}</option>
+              </select>
+              <label htmlFor="raid-intro-seconds">{t('introSeconds')}</label>
+              <input
+                id="raid-intro-seconds"
+                type="number"
+                min="1"
+                max="60"
+                value={overlaySettings.raidIntroSeconds}
+                onChange={(event) =>
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    raidIntroSeconds: Number(event.target.value),
+                  }))
+                }
+              />
+              <label htmlFor="raid-clips-enabled">{t('clipPlayback')}</label>
+              <input
+                id="raid-clips-enabled"
+                type="checkbox"
+                checked={overlaySettings.raidClipsEnabled}
+                onChange={(event) =>
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    raidClipsEnabled: event.target.checked,
+                  }))
+                }
+              />
+              <label htmlFor="raid-clip-count">{t('clipCount')}</label>
+              <select
+                id="raid-clip-count"
+                value={overlaySettings.raidClipCount}
+                onChange={(event) =>
+                  setOverlaySettings((current) => ({
+                    ...current,
+                    raidClipCount: Number(event.target.value),
+                  }))
+                }
+              >
+                {[1, 2, 3, 4, 5].map((count) => (
+                  <option key={count} value={count}>
+                    {t('items', { count })}
                   </option>
                 ))}
               </select>
-              <select
-                aria-label={t('displayMode')}
-                value={definition.effectType}
-                onChange={(event) =>
-                  setStampDefinitions((current) =>
-                    current.map((item) =>
-                      item.id === definition.id
-                        ? { ...item, effectType: event.target.value as 'default' | 'falling' }
-                        : item,
-                    ),
-                  )
-                }
+              <label htmlFor="raid-auto-shoutout">
+                {overlaySettings.raidIntroductionMode === 'manual'
+                  ? t('manualShoutoutAction')
+                  : t('autoShoutout')}
+              </label>
+              <input
+                id="raid-auto-shoutout"
+                type="checkbox"
+                checked={overlaySettings.raidAutoShoutout}
+                onChange={(event) => void changeRaidAutoShoutout(event.target.checked)}
+              />
+            </div>
+            <p className="help-text">{t('clipHelp')}</p>
+            <button type="button" onClick={() => void saveSettings()}>
+              {t('saveRaid')}
+            </button>
+            {settingsSaved && <span className="saved-message">{t('saved')}</span>}
+            {raidPhaseStatus && (
+              <p className="help-text" role="status">
+                {t('raidPhase', { phase: raidPhaseStatus.phase })}
+              </p>
+            )}
+            {shoutoutResult && (
+              <p className={shoutoutResult.success ? 'success' : 'error'} role="status">
+                {shoutoutResult.success
+                  ? t('shoutoutSucceeded')
+                  : t('shoutoutFailed', { error: shoutoutResult.error ?? t('unknownError') })}
+              </p>
+            )}
+          </section>
+        </div>
+        <div id="control-page-points" className="control-page" hidden={activePage !== 'points'}>
+          <ChannelPointsPanel
+            onAuthorize={() => startAuthorization(true)}
+            authorizationBusy={isRestoring || isStarting || Boolean(authorization)}
+          />
+        </div>
+        <div id="control-page-assets" className="control-page" hidden={activePage !== 'assets'}>
+          <section className="panel" aria-labelledby="custom-stamps-title">
+            <h2 id="custom-stamps-title">{t('customStamps')}</h2>
+            <p>{t('loaded', { count: customStampCount })}</p>
+            <p className="help-text">{t('stampHelp')}</p>
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void openCustomStampDirectory()}
+                disabled={!stampDirectoryPath}
               >
-                <option value="default">{t('inline')}</option>
-                <option value="falling">{t('falling')}</option>
-              </select>
+                {t('openImageFolder')}
+              </button>
+              <button type="button" onClick={() => void reloadCustomStamps()}>
+                {t('reloadImages')}
+              </button>
+            </div>
+            <div className="stamp-editor">
+              {stampDefinitions.map((definition) => (
+                <div className="stamp-row" key={definition.id}>
+                  <input
+                    aria-label={t('commandName')}
+                    placeholder={t('commandName')}
+                    value={definition.commandName}
+                    onChange={(event) =>
+                      setStampDefinitions((current) =>
+                        current.map((item) =>
+                          item.id === definition.id
+                            ? { ...item, commandName: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    aria-label={t('imageFile')}
+                    value={definition.fileName}
+                    onChange={(event) =>
+                      setStampDefinitions((current) =>
+                        current.map((item) =>
+                          item.id === definition.id
+                            ? { ...item, fileName: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">{t('selectImage')}</option>
+                    {stampImageFiles.map((fileName) => (
+                      <option key={fileName} value={fileName}>
+                        {fileName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label={t('displayMode')}
+                    value={definition.effectType}
+                    onChange={(event) =>
+                      setStampDefinitions((current) =>
+                        current.map((item) =>
+                          item.id === definition.id
+                            ? { ...item, effectType: event.target.value as 'default' | 'falling' }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="default">{t('inline')}</option>
+                    <option value="falling">{t('falling')}</option>
+                  </select>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() =>
+                      setStampDefinitions((current) =>
+                        current.filter((item) => item.id !== definition.id),
+                      )
+                    }
+                  >
+                    {t('remove')}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="button-row">
               <button
                 className="secondary-button"
                 type="button"
                 onClick={() =>
-                  setStampDefinitions((current) =>
-                    current.filter((item) => item.id !== definition.id),
-                  )
+                  setStampDefinitions((current) => [
+                    ...current,
+                    {
+                      id: crypto.randomUUID(),
+                      commandName: '',
+                      fileName: stampImageFiles[0] ?? '',
+                      effectType: 'default',
+                    },
+                  ])
                 }
+                disabled={stampImageFiles.length === 0}
               >
-                {t('remove')}
+                {t('addStamp')}
+              </button>
+              <button type="button" onClick={() => void saveCustomStamps()}>
+                {t('saveStamps')}
+              </button>
+              {stampsSaved && <span className="saved-message">{t('saved')}</span>}
+            </div>
+          </section>
+          <details className="panel" aria-labelledby="external-emotes-title">
+            <summary id="external-emotes-title">{t('externalEmotes')}</summary>
+            {externalEmoteStatus?.providers.map((status) => (
+              <p key={status.provider} className={status.error ? 'provider-error' : undefined}>
+                {status.provider}:{' '}
+                {status.error
+                  ? t('loadFailed', { error: status.error })
+                  : t('items', { count: status.count })}
+              </p>
+            ))}
+            <p className="help-text">
+              {t('total', { count: externalEmoteStatus?.emotes.length ?? 0 })}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadExternalEmotes()}
+              disabled={isLoadingExternalEmotes}
+            >
+              {isLoadingExternalEmotes ? t('loading') : t('reloadExternal')}
+            </button>
+          </details>
+        </div>
+        <div id="control-page-tools" className="control-page" hidden={activePage !== 'tools'}>
+          <section className="panel" aria-labelledby="overlay-test-title">
+            <h2 id="overlay-test-title">{t('overlayTest')}</h2>
+            <div className="test-comment-row">
+              <input
+                value={testComment}
+                onChange={(event) => setTestComment(event.target.value)}
+                aria-label={t('testComment')}
+              />
+              <button
+                type="button"
+                onClick={() => void sendTestComment()}
+                disabled={!testComment.trim()}
+              >
+                {t('showComment')}
               </button>
             </div>
-          ))}
-        </div>
-        <div className="button-row">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() =>
-              setStampDefinitions((current) => [
-                ...current,
-                {
-                  id: crypto.randomUUID(),
-                  commandName: '',
-                  fileName: stampImageFiles[0] ?? '',
-                  effectType: 'default',
-                },
-              ])
-            }
-            disabled={stampImageFiles.length === 0}
-          >
-            {t('addStamp')}
-          </button>
-          <button type="button" onClick={() => void saveCustomStamps()}>
-            {t('saveStamps')}
-          </button>
-          {stampsSaved && <span className="saved-message">{t('saved')}</span>}
-        </div>
-      </section>
-
-      <section className="panel" aria-labelledby="runtime-title">
-        <h2 id="runtime-title">{t('runtime')}</h2>
-        <dl>
-          <dt>{t('environment')}</dt>
-          <dd>
-            {runtimeInfo
-              ? `${runtimeInfo.operatingSystem} (${runtimeInfo.architecture})`
-              : t('unavailable')}
-          </dd>
-          <dt>localhost</dt>
-          <dd>{port ? `localhost:${port}` : t('unavailable')}</dd>
-          <dt>{t('portSetting')}</dt>
-          <dd>{t('autoPort')}</dd>
-          <dt>{t('overlay')}</dt>
-          <dd>{overlayWindowVisible ? t('onDesktop') : t('offscreen')}</dd>
-        </dl>
-        <div className="button-row">
-          <button
-            type="button"
-            onClick={() => void changeOverlayWindowVisibility(true)}
-            disabled={overlayWindowVisible}
-          >
-            {t('restoreDesktop')}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void changeOverlayWindowVisibility(false)}
-            disabled={!overlayWindowVisible}
-          >
-            {t('moveOffscreen')}
-          </button>
-        </div>
-        <p className="help-text">{t('offscreenHelp')}</p>
-      </section>
-
-      <section className="panel" aria-labelledby="audience-title">
-        <h2 id="audience-title">{t('audience')}</h2>
-        <p className="help-text">{t('audienceHelp')}</p>
-        <div className="button-row">
-          <button type="button" onClick={() => void saveAudience()}>
-            {t('saveAudience')}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void openAudienceDirectory()}
-          >
-            {t('openAudienceFolder')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void clearAudience()}>
-            {t('clearAudience')}
-          </button>
-        </div>
-        {audienceStatus && (
-          <p className="success">
-            {t('audienceSaved', { count: audienceStatus.total, path: audienceStatus.path })}
-          </p>
-        )}
-      </section>
-
-      <section className="panel" aria-labelledby="overlay-test-title">
-        <h2 id="overlay-test-title">{t('overlayTest')}</h2>
-        <div className="test-comment-row">
-          <input
-            value={testComment}
-            onChange={(event) => setTestComment(event.target.value)}
-            aria-label={t('testComment')}
-          />
-          <button
-            type="button"
-            onClick={() => void sendTestComment()}
-            disabled={!testComment.trim()}
-          >
-            {t('showComment')}
-          </button>
-        </div>
-        <div className="effect-buttons">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void sendTestComment('!helpcs')}
-          >
-            {t('showStampHelp')}
-          </button>
-          {['sakura', 'snow', 'balloons', 'kamifubuki', 'rain', 'maruta', 'chikuwa', 'marutai'].map(
-            (effect) => (
+            <div className="effect-buttons">
               <button
                 className="secondary-button"
                 type="button"
-                key={effect}
-                onClick={() => void sendTestComment(effect)}
+                onClick={() => void sendTestComment('!helpcs')}
               >
-                {effect}
+                {t('showStampHelp')}
               </button>
-            ),
-          )}
+              {[
+                'sakura',
+                'snow',
+                'balloons',
+                'kamifubuki',
+                'rain',
+                'maruta',
+                'chikuwa',
+                'marutai',
+              ].map((effect) => (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  key={effect}
+                  onClick={() => void sendTestComment(effect)}
+                >
+                  {effect}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => void sendTestRaid()}>
+              {t('showRaidIntro')}
+            </button>
+            <div className="test-comment-row">
+              <input
+                value={testClipId}
+                onChange={(event) => setTestClipId(event.target.value)}
+                aria-label={t('testClip')}
+                placeholder={t('clipPlaceholder')}
+              />
+              <button
+                type="button"
+                onClick={() => void sendTestRaid(true)}
+                disabled={!extractClipId(testClipId)}
+              >
+                {t('showRaidClip')}
+              </button>
+            </div>
+            <div className="settings-grid test-clip-duration">
+              <label htmlFor="test-clip-duration">{t('testDuration')}</label>
+              <input
+                id="test-clip-duration"
+                type="number"
+                min="1"
+                max="60"
+                step="1"
+                value={testClipDuration}
+                onChange={(event) => setTestClipDuration(Number(event.target.value))}
+              />
+            </div>
+          </section>
+          <details className="panel" aria-labelledby="audience-title">
+            <summary id="audience-title">{t('audience')}</summary>
+            <p className="help-text">{t('audienceHelp')}</p>
+            <div className="button-row">
+              <button type="button" onClick={() => void saveAudience()}>
+                {t('saveAudience')}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void openAudienceDirectory()}
+              >
+                {t('openAudienceFolder')}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void clearAudience()}
+              >
+                {t('clearAudience')}
+              </button>
+            </div>
+            {audienceStatus && (
+              <p className="success">
+                {t('audienceSaved', { count: audienceStatus.total, path: audienceStatus.path })}
+              </p>
+            )}
+          </details>
+          <details className="panel" aria-labelledby="runtime-title">
+            <summary id="runtime-title">{t('runtime')}</summary>
+            <dl>
+              <dt>{t('environment')}</dt>
+              <dd>
+                {runtimeInfo
+                  ? `${runtimeInfo.operatingSystem} (${runtimeInfo.architecture})`
+                  : t('unavailable')}
+              </dd>
+              <dt>localhost</dt>
+              <dd>{port ? `localhost:${port}` : t('unavailable')}</dd>
+              <dt>{t('portSetting')}</dt>
+              <dd>{t('autoPort')}</dd>
+              <dt>{t('overlay')}</dt>
+              <dd>{overlayWindowVisible ? t('onDesktop') : t('offscreen')}</dd>
+            </dl>
+          </details>
         </div>
-        <button type="button" onClick={() => void sendTestRaid()}>
-          {t('showRaidIntro')}
-        </button>
-        <div className="test-comment-row">
-          <input
-            value={testClipId}
-            onChange={(event) => setTestClipId(event.target.value)}
-            aria-label={t('testClip')}
-            placeholder={t('clipPlaceholder')}
-          />
-          <button
-            type="button"
-            onClick={() => void sendTestRaid(true)}
-            disabled={!extractClipId(testClipId)}
-          >
-            {t('showRaidClip')}
-          </button>
-        </div>
-        <div className="settings-grid test-clip-duration">
-          <label htmlFor="test-clip-duration">{t('testDuration')}</label>
-          <input
-            id="test-clip-duration"
-            type="number"
-            min="1"
-            max="60"
-            step="1"
-            value={testClipDuration}
-            onChange={(event) => setTestClipDuration(Number(event.target.value))}
-          />
-        </div>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
 

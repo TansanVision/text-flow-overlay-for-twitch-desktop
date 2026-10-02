@@ -138,6 +138,7 @@ export function ChannelPointsPanel({
   authorizationBusy: boolean;
 }) {
   const { t } = useTranslation();
+  const [selectedEffect, setSelectedEffect] = useState<PointsEffect>('hearts');
   const [snapshot, setSnapshot] = useState<PointsSnapshot>({
     authorized: false,
     rewards: [],
@@ -180,7 +181,6 @@ export function ChannelPointsPanel({
           {t('pointsAuthorize')}
         </button>
       )}
-      <p className="help-text">{t('pointsAvailability')}</p>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -191,35 +191,72 @@ export function ChannelPointsPanel({
           {snapshot.syncError}
         </p>
       )}
+      <fieldset className="points-picker">
+        <legend>{t('pointsChoose')}</legend>
+        {pointsEffects.map((effect) => {
+          const reward = snapshot.rewards.find((item) => item.effect === effect);
+          return (
+            <button
+              type="button"
+              className="points-choice"
+              key={effect}
+              aria-pressed={selectedEffect === effect}
+              aria-controls={`points-editor-${effect}`}
+              onClick={() => setSelectedEffect(effect)}
+            >
+              <span>{t(pointsLabels[effect])}</span>
+              <small data-enabled={reward?.enabled ?? false}>
+                {t(
+                  !reward
+                    ? 'pointsNotCreated'
+                    : reward.enabled
+                      ? 'pointsAccepting'
+                      : 'pointsDisabled',
+                )}
+              </small>
+            </button>
+          );
+        })}
+      </fieldset>
       {pointsEffects.map((effect) => {
         const reward = snapshot.rewards.find((reward) => reward.effect === effect);
         return (
-          <RewardForm
-            key={`${effect}:${reward?.id ?? ''}:${reward?.cost}:${reward?.cooldownSeconds}:${reward?.enabled}`}
-            effect={effect}
-            reward={reward}
-            authorized={snapshot.authorized && !authorizationBusy}
-            onSaved={refresh}
-          />
+          <div key={effect} id={`points-editor-${effect}`} hidden={selectedEffect !== effect}>
+            <RewardForm
+              key={`${effect}:${reward?.id ?? ''}:${reward?.cost}:${reward?.cooldownSeconds}:${reward?.enabled}`}
+              effect={effect}
+              reward={reward}
+              authorized={snapshot.authorized && !authorizationBusy}
+              onSaved={refresh}
+            />
+          </div>
         );
       })}
-      <h3>{t('pointsHistory')}</h3>
-      {snapshot.jobs.length === 0 ? (
-        <p className="help-text">{t('pointsNoHistory')}</p>
-      ) : (
-        <ul className="points-history">
-          {snapshot.jobs.slice(0, 10).map((job) => (
-            <li key={job.id}>
-              <span>
-                {t(pointsLabels[job.effect])}
-                {job.preview ? ` (${t('pointsTest')})` : ''} — {t(statusLabels[job.status])}
-              </span>
-              {job.error && <small className="provider-error">{job.error}</small>}
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="help-text">{t('pointsSettlementHelp')}</p>
+      <details className="disclosure">
+        <summary>
+          {t('pointsHistory')} ({snapshot.jobs.length})
+        </summary>
+        {snapshot.jobs.length === 0 ? (
+          <p className="help-text">{t('pointsNoHistory')}</p>
+        ) : (
+          <ul className="points-history">
+            {snapshot.jobs.slice(0, 10).map((job) => (
+              <li key={job.id}>
+                <span>
+                  {t(pointsLabels[job.effect])}
+                  {job.preview ? ` (${t('pointsTest')})` : ''} — {t(statusLabels[job.status])}
+                </span>
+                {job.error && <small className="provider-error">{job.error}</small>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+      <details className="disclosure">
+        <summary>{t('pointsUsage')}</summary>
+        <p className="help-text">{t('pointsAvailability')}</p>
+        <p className="help-text">{t('pointsSettlementHelp')}</p>
+      </details>
     </section>
   );
 }
