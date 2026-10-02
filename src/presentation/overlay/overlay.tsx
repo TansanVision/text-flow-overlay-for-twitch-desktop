@@ -25,7 +25,12 @@ import {
   isCustomStampHelpCommand,
   parseCommands,
 } from './comment-command';
-import { shouldFilterComment, splitByBreaklineCommand, tokenizeKeywords } from './comment-pipeline';
+import {
+  removeSpacesBetweenStamps,
+  shouldFilterComment,
+  splitByBreaklineCommand,
+  tokenizeKeywords,
+} from './comment-pipeline';
 import { CustomCommandHelp, type HelpStamp } from './custom-command-help';
 import { FallingStamps } from './falling-stamps';
 import { type Raid, RaidIntro } from './raid-intro';
@@ -163,7 +168,7 @@ function expandCustomStamps(
       );
     }
   }
-  return { fragments: expanded, fallingStamps };
+  return { fragments: removeSpacesBetweenStamps(expanded), fallingStamps };
 }
 
 function splitChatFragmentsIntoLines(fragments: ChatFragment[]): ChatFragment[][] {

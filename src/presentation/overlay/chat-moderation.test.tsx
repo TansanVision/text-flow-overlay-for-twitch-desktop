@@ -116,6 +116,29 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it('renders consecutive emotes without separator spans and preserves text and line breaks', async () => {
+  await act(async () => {
+    emit('twitch-chat-message', {
+      id: 'emotes',
+      fragments: [
+        { type: 'text', key: '0', text: 'hello  world ' },
+        { type: 'emote', key: '1', text: 'Kappa', url: 'kappa.png' },
+        { type: 'text', key: '2', text: '  ' },
+        { type: 'emote', key: '3', text: 'Kappa', url: 'kappa.png' },
+        { type: 'text', key: '4', text: ' U+2003 ' },
+        { type: 'emote', key: '5', text: 'Kappa', url: 'kappa.png' },
+        { type: 'text', key: '6', text: ' goodbye' },
+      ],
+    });
+  });
+  const lines = [...container.querySelectorAll('.chat-line')];
+  expect(lines).toHaveLength(2);
+  expect([...lines[0].children].map((element) => element.tagName)).toEqual(['SPAN', 'IMG', 'IMG']);
+  expect(lines[0].textContent).toBe('hello  world ');
+  expect([...lines[1].children].map((element) => element.tagName)).toEqual(['IMG', 'SPAN']);
+  expect(lines[1].textContent).toBe(' goodbye');
+});
+
 it('removes a deleted message and its effects and stamps while preserving other messages', async () => {
   await act(async () => {
     chat('removed', 'snow drop remove-me');
