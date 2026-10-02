@@ -6,10 +6,12 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Notify;
 
 use crate::twitch_chat;
 use crate::twitch_config::TWITCH_CLIENT_ID;
+use crate::twitch_connection::{ConnectionPhase, ConnectionState};
 
 const DEVICE_URL: &str = "https://id.twitch.tv/oauth2/device";
 const TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
@@ -26,6 +28,8 @@ pub struct TwitchAuthState {
     token_path: PathBuf,
     chat_task: Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
     refresh_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    refresh_requested: Arc<Notify>,
+    scopes: Mutex<Vec<String>>,
 }
 
 impl TwitchAuthState {
@@ -37,6 +41,33 @@ impl TwitchAuthState {
             token_path,
             chat_task: Arc::new(Mutex::new(None)),
             refresh_task: Mutex::new(None),
+            refresh_requested: Arc::new(Notify::new()),
+            scopes: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl TwitchAuthState {
+    pub fn has_points_scope(&self) -> bool {
+        self.scopes.lock().is_ok_and(|scopes| {
+            scopes
+                .iter()
+                .any(|scope| scope == "channel:manage:redemptions")
+        })
+    }
+
+    pub fn points_credentials(&self) -> Result<(String, String), String> {
+        let token = self
+            .access_token
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let user = self.user_id.lock().map_err(|error| error.to_string())?;
+        if !self.has_points_scope() {
+            return Err("チャンネルポイントの追加認証が必要です".into());
+        }
+        match (token.as_ref(), user.as_ref()) {
+            (Some(token), Some(user)) => Ok((token.clone(), user.clone())),
+            _ => Err("Twitchへ接続してください".into()),
         }
     }
 }
@@ -45,6 +76,7 @@ impl TwitchAuthState {
 struct PendingAuthorization {
     client_id: String,
     device_code: String,
+    scopes: String,
 }
 
 #[derive(Deserialize)]
@@ -144,6 +176,7 @@ pub enum PollResult {
 )]
 pub enum RestoreResult {
     Disconnected,
+    Retrying,
     Authorized {
         login: String,
         display_name: String,
@@ -156,14 +189,21 @@ pub enum RestoreResult {
 #[tauri::command]
 pub async fn start_twitch_device_authorization(
     state: tauri::State<'_, TwitchAuthState>,
+    channel_points: Option<bool>,
 ) -> Result<DeviceAuthorization, String> {
     let client_id = TWITCH_CLIENT_ID.to_owned();
+    let scopes = if channel_points.unwrap_or(false) {
+        format!("{REQUIRED_SCOPES} channel:manage:redemptions")
+    } else {
+        REQUIRED_SCOPES.to_owned()
+    };
 
     let response = reqwest::Client::new()
         .post(DEVICE_URL)
+        .timeout(Duration::from_secs(15))
         .form(&[
             ("client_id", client_id.as_str()),
-            ("scopes", REQUIRED_SCOPES),
+            ("scopes", scopes.as_str()),
         ])
         .send()
         .await
@@ -185,6 +225,7 @@ pub async fn start_twitch_device_authorization(
     *state.pending.lock().map_err(|error| error.to_string())? = Some(PendingAuthorization {
         client_id,
         device_code: device.device_code.clone(),
+        scopes,
     });
 
     Ok(DeviceAuthorization {
@@ -209,9 +250,10 @@ pub async fn poll_twitch_device_authorization(
 
     let response = reqwest::Client::new()
         .post(TOKEN_URL)
+        .timeout(Duration::from_secs(15))
         .form(&[
             ("client_id", pending.client_id.as_str()),
-            ("scopes", REQUIRED_SCOPES),
+            ("scopes", pending.scopes.as_str()),
             ("device_code", pending.device_code.as_str()),
             ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
         ])
@@ -241,6 +283,14 @@ pub async fn poll_twitch_device_authorization(
     if validated.client_id != pending.client_id {
         return Err("検証したトークンのClient IDが一致しません。".into());
     }
+    if !pending
+        .scopes
+        .split_whitespace()
+        .all(|scope| validated.scopes.iter().any(|granted| granted == scope))
+    {
+        return Err("要求したTwitch権限が許可されていません。再度認証してください。".into());
+    }
+    *state.scopes.lock().map_err(|error| error.to_string())? = validated.scopes.clone();
 
     *state
         .access_token
@@ -312,23 +362,17 @@ pub async fn restore_twitch_authorization(
                 let _ = fs::remove_file(&state.token_path);
                 return Ok(RestoreResult::Disconnected);
             }
-            Err(_) => {
+            Err(TokenValidationError::Temporary) => return Ok(RestoreResult::Retrying),
+            Err(TokenValidationError::Rejected) => {
                 let Some(refresh_token) = stored.refresh_token else {
                     let _ = fs::remove_file(&state.token_path);
                     return Ok(RestoreResult::Disconnected);
                 };
                 let token = match refresh_access_token(&stored.client_id, &refresh_token).await {
                     Ok(token) => token,
-                    Err(error) => {
-                        log::warn!("Twitch token refresh failed during restore: {error}");
-                        return Ok(RestoreResult::Disconnected);
-                    }
+                    Err(TokenRefreshError::Temporary) => return Ok(RestoreResult::Retrying),
+                    Err(TokenRefreshError::Rejected) => return Ok(RestoreResult::Disconnected),
                 };
-                let validated = validate_token(&token.access_token).await?;
-                if !has_required_scopes(&validated) || validated.client_id != stored.client_id {
-                    let _ = fs::remove_file(&state.token_path);
-                    return Ok(RestoreResult::Disconnected);
-                }
                 save_token(
                     &state.token_path,
                     &StoredToken {
@@ -337,6 +381,15 @@ pub async fn restore_twitch_authorization(
                         refresh_token: Some(token.refresh_token.clone()),
                     },
                 )?;
+                let validated = match validate_token(&token.access_token).await {
+                    Ok(validated) => validated,
+                    Err(TokenValidationError::Temporary) => return Ok(RestoreResult::Retrying),
+                    Err(TokenValidationError::Rejected) => return Ok(RestoreResult::Disconnected),
+                };
+                if !has_required_scopes(&validated) || validated.client_id != stored.client_id {
+                    let _ = fs::remove_file(&state.token_path);
+                    return Ok(RestoreResult::Disconnected);
+                }
                 (
                     token.access_token,
                     Some(token.refresh_token),
@@ -352,6 +405,7 @@ pub async fn restore_twitch_authorization(
         .lock()
         .map_err(|error| error.to_string())? = Some(access_token.clone());
     *state.user_id.lock().map_err(|error| error.to_string())? = Some(validated.user_id.clone());
+    *state.scopes.lock().map_err(|error| error.to_string())? = validated.scopes.clone();
     start_chat(&app, &state, access_token, validated.user_id.clone())?;
     if let Some(refresh_token) = refresh_token {
         start_refresh_task(
@@ -376,6 +430,7 @@ pub async fn restore_twitch_authorization(
 async fn get_user_profile(access_token: &str, user_id: &str) -> Option<TwitchUser> {
     reqwest::Client::new()
         .get(USERS_URL)
+        .timeout(Duration::from_secs(8))
         .query(&[("id", user_id)])
         .bearer_auth(access_token)
         .header("Client-Id", TWITCH_CLIENT_ID)
@@ -391,7 +446,12 @@ async fn get_user_profile(access_token: &str, user_id: &str) -> Option<TwitchUse
 }
 
 #[tauri::command]
-pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), String> {
+pub fn logout_twitch(
+    app: AppHandle,
+    state: tauri::State<'_, TwitchAuthState>,
+) -> Result<(), String> {
+    app.state::<ConnectionState>().disconnect(&app);
+    *state.scopes.lock().map_err(|error| error.to_string())? = Vec::new();
     *state
         .access_token
         .lock()
@@ -418,6 +478,36 @@ pub fn logout_twitch(state: tauri::State<'_, TwitchAuthState>) -> Result<(), Str
         fs::remove_file(&state.token_path).map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn reconnect_twitch(
+    app: AppHandle,
+    state: tauri::State<'_, TwitchAuthState>,
+) -> Result<(), String> {
+    let token = state
+        .access_token
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Twitchへ接続してください".to_owned())?;
+    let user_id = state
+        .user_id
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Twitchへ接続してください".to_owned())?;
+    start_chat(&app, &state, token, user_id)
+}
+
+pub fn can_refresh_token(app: &AppHandle) -> bool {
+    app.state::<TwitchAuthState>()
+        .refresh_task
+        .lock()
+        .is_ok_and(|task| {
+            task.as_ref()
+                .is_some_and(|task| !task.inner().is_finished())
+        })
 }
 
 #[tauri::command]
@@ -585,16 +675,18 @@ fn start_chat(
     access_token: String,
     user_id: String,
 ) -> Result<(), String> {
-    if let Some(task) = state
-        .chat_task
-        .lock()
-        .map_err(|error| error.to_string())?
-        .take()
-    {
+    let mut current_task = state.chat_task.lock().map_err(|error| error.to_string())?;
+    if let Some(task) = current_task.take() {
         task.abort();
     }
-    let task = twitch_chat::spawn(app.clone(), access_token, user_id.clone(), user_id);
-    *state.chat_task.lock().map_err(|error| error.to_string())? = Some(task);
+    let task = twitch_chat::spawn(
+        app.clone(),
+        access_token,
+        user_id.clone(),
+        user_id,
+        Arc::clone(&state.refresh_requested),
+    );
+    *current_task = Some(task);
     Ok(())
 }
 
@@ -618,6 +710,7 @@ fn start_refresh_task(
     let access_token_state = Arc::clone(&state.access_token);
     let user_id_state = Arc::clone(&state.user_id);
     let chat_task = Arc::clone(&state.chat_task);
+    let refresh_requested = Arc::clone(&state.refresh_requested);
     let task = tauri::async_runtime::spawn(async move {
         maintain_tokens(
             app,
@@ -628,6 +721,7 @@ fn start_refresh_task(
             access_token_state,
             user_id_state,
             chat_task,
+            refresh_requested,
         )
         .await;
     });
@@ -648,10 +742,14 @@ async fn maintain_tokens(
     access_token_state: Arc<Mutex<Option<String>>>,
     user_id_state: Arc<Mutex<Option<String>>>,
     chat_task: Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    refresh_requested: Arc<Notify>,
 ) {
     loop {
         let wait_seconds = expires_in.saturating_sub(300).clamp(60, 3600);
-        tokio::time::sleep(Duration::from_secs(wait_seconds)).await;
+        let force_refresh = tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(wait_seconds)) => false,
+            _ = refresh_requested.notified() => true,
+        };
         let current_access_token = match access_token_state.lock() {
             Ok(value) => value.clone(),
             Err(error) => {
@@ -659,11 +757,22 @@ async fn maintain_tokens(
                 return;
             }
         };
-        if let Some(token) = current_access_token {
-            if let Ok(validated) = validate_token(&token).await {
-                expires_in = validated.expires_in;
-                if expires_in > 600 {
+        if let Some(token) = current_access_token.filter(|_| !force_refresh) {
+            match validate_token(&token).await {
+                Err(TokenValidationError::Temporary) => {
+                    expires_in = expires_in.min(360);
                     continue;
+                }
+                Err(TokenValidationError::Rejected) => {}
+                Ok(validated) => {
+                    if !has_required_scopes(&validated) || validated.client_id != client_id {
+                        require_reauthorization(&app, &chat_task);
+                        return;
+                    }
+                    expires_in = validated.expires_in;
+                    if expires_in > 600 {
+                        continue;
+                    }
                 }
             }
         }
@@ -671,27 +780,17 @@ async fn maintain_tokens(
         let refreshed = loop {
             match refresh_access_token(&client_id, &refresh_token).await {
                 Ok(token) => break token,
+                Err(TokenRefreshError::Rejected) => {
+                    require_reauthorization(&app, &chat_task);
+                    return;
+                }
                 Err(error) => {
                     log::warn!("Twitch token refresh failed; retrying in 60 seconds: {error}");
                     tokio::time::sleep(Duration::from_secs(60)).await;
                 }
             }
         };
-        let validated = match validate_token(&refreshed.access_token).await {
-            Ok(validated)
-                if has_required_scopes(&validated) && validated.client_id == client_id =>
-            {
-                validated
-            }
-            Ok(_) => {
-                log::warn!("Refreshed Twitch token has an unexpected Client ID or missing scopes");
-                return;
-            }
-            Err(error) => {
-                log::warn!("Refreshed Twitch token validation failed: {error}");
-                return;
-            }
-        };
+        // Save rotated refresh tokens before another network request can fail.
         refresh_token = refreshed.refresh_token;
         expires_in = refreshed.expires_in;
         if let Err(error) = save_token(
@@ -703,15 +802,47 @@ async fn maintain_tokens(
             },
         ) {
             log::warn!("Refreshed Twitch token could not be saved: {error}");
-            continue;
         }
+        let validated = loop {
+            match validate_token(&refreshed.access_token).await {
+                Ok(validated)
+                    if has_required_scopes(&validated) && validated.client_id == client_id =>
+                {
+                    break validated;
+                }
+                Ok(_) => {
+                    log::warn!(
+                        "Refreshed Twitch token has an unexpected Client ID or missing scopes"
+                    );
+                    require_reauthorization(&app, &chat_task);
+                    return;
+                }
+                Err(TokenValidationError::Rejected) => {
+                    require_reauthorization(&app, &chat_task);
+                    return;
+                }
+                Err(TokenValidationError::Temporary) => {
+                    log::warn!("Refreshed Twitch token validation temporarily unavailable");
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                }
+            }
+        };
         if let Ok(mut value) = access_token_state.lock() {
             *value = Some(refreshed.access_token.clone());
         }
         if let Ok(mut value) = user_id_state.lock() {
             *value = Some(validated.user_id.clone());
         }
-        restart_chat_task(&app, &chat_task, refreshed.access_token, validated.user_id);
+        if let Ok(mut scopes) = app.state::<TwitchAuthState>().scopes.lock() {
+            *scopes = validated.scopes.clone();
+        }
+        restart_chat_task(
+            &app,
+            &chat_task,
+            refreshed.access_token,
+            validated.user_id,
+            Arc::clone(&refresh_requested),
+        );
     }
 }
 
@@ -720,6 +851,7 @@ fn restart_chat_task(
     chat_task: &Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
     access_token: String,
     user_id: String,
+    refresh_requested: Arc<Notify>,
 ) {
     let Ok(mut current_task) = chat_task.lock() else {
         return;
@@ -732,15 +864,52 @@ fn restart_chat_task(
         access_token,
         user_id.clone(),
         user_id,
+        refresh_requested,
     ));
+}
+
+fn require_reauthorization(
+    app: &AppHandle,
+    chat_task: &Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+) {
+    if let Ok(mut task) = chat_task.lock() {
+        if let Some(task) = task.take() {
+            task.abort();
+        }
+    }
+    let state = app.state::<ConnectionState>();
+    let generation = state.begin(app);
+    state.update(
+        app,
+        generation,
+        ConnectionPhase::ReauthorizationRequired,
+        None,
+        Vec::new(),
+    );
+}
+
+#[derive(Debug)]
+enum TokenRefreshError {
+    Rejected,
+    Temporary,
+}
+
+impl std::fmt::Display for TokenRefreshError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Rejected => "Twitch authorization must be renewed",
+            Self::Temporary => "Twitch token refresh temporarily unavailable",
+        })
+    }
 }
 
 async fn refresh_access_token(
     client_id: &str,
     refresh_token: &str,
-) -> Result<TokenResponse, String> {
+) -> Result<TokenResponse, TokenRefreshError> {
     let response = reqwest::Client::new()
         .post(TOKEN_URL)
+        .timeout(Duration::from_secs(15))
         .form(&[
             ("client_id", client_id),
             ("grant_type", "refresh_token"),
@@ -748,18 +917,19 @@ async fn refresh_access_token(
         ])
         .send()
         .await
-        .map_err(|error| format!("Twitchトークンの更新に失敗しました: {error}"))?;
+        .map_err(|_| TokenRefreshError::Temporary)?;
     if !response.status().is_success() {
         let status = response.status();
-        let error = response.json::<OAuthError>().await.ok();
-        return Err(error
-            .and_then(|value| value.message)
-            .unwrap_or_else(|| format!("Twitchトークンを更新できませんでした ({status})")));
+        return Err(if matches!(status.as_u16(), 400 | 401 | 403) {
+            TokenRefreshError::Rejected
+        } else {
+            TokenRefreshError::Temporary
+        });
     }
     response
         .json::<TokenResponse>()
         .await
-        .map_err(|error| format!("更新したTwitchトークンを読み取れませんでした: {error}"))
+        .map_err(|_| TokenRefreshError::Temporary)
 }
 
 fn has_required_scopes(validated: &ValidatedToken) -> bool {
@@ -774,22 +944,48 @@ fn save_token(path: &PathBuf, token: &StoredToken) -> Result<(), String> {
         .map_err(|error| format!("Twitch認証情報を保存できませんでした: {error}"))
 }
 
-async fn validate_token(access_token: &str) -> Result<ValidatedToken, String> {
+#[derive(Debug, PartialEq, Eq)]
+enum TokenValidationError {
+    Rejected,
+    Temporary,
+}
+
+impl From<TokenValidationError> for String {
+    fn from(error: TokenValidationError) -> String {
+        match error {
+            TokenValidationError::Rejected => "Twitchアクセストークンが無効です。".into(),
+            TokenValidationError::Temporary => {
+                "Twitch認証を確認できません。通信を確認して再試行してください。".into()
+            }
+        }
+    }
+}
+
+fn validation_error(status: reqwest::StatusCode) -> TokenValidationError {
+    if matches!(status.as_u16(), 401 | 403) {
+        TokenValidationError::Rejected
+    } else {
+        TokenValidationError::Temporary
+    }
+}
+
+async fn validate_token(access_token: &str) -> Result<ValidatedToken, TokenValidationError> {
     let response = reqwest::Client::new()
         .get(VALIDATE_URL)
+        .timeout(Duration::from_secs(15))
         .header("Authorization", format!("OAuth {access_token}"))
         .send()
         .await
-        .map_err(|error| format!("トークン検証に失敗しました: {error}"))?;
+        .map_err(|_| TokenValidationError::Temporary)?;
 
     if !response.status().is_success() {
-        return Err("Twitchアクセストークンが無効です。".into());
+        return Err(validation_error(response.status()));
     }
 
     response
         .json::<ValidatedToken>()
         .await
-        .map_err(|error| format!("トークン検証結果を読み取れませんでした: {error}"))
+        .map_err(|_| TokenValidationError::Temporary)
 }
 
 fn parse_stored_token_for_current_client(bytes: &[u8]) -> Result<Option<StoredToken>, String> {
@@ -801,6 +997,22 @@ fn parse_stored_token_for_current_client(bytes: &[u8]) -> Result<Option<StoredTo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validation_outages_do_not_invalidate_saved_authorization() {
+        for status in [401, 403] {
+            assert_eq!(
+                validation_error(reqwest::StatusCode::from_u16(status).unwrap()),
+                TokenValidationError::Rejected
+            );
+        }
+        for status in [408, 429, 500, 502, 503, 504] {
+            assert_eq!(
+                validation_error(reqwest::StatusCode::from_u16(status).unwrap()),
+                TokenValidationError::Temporary
+            );
+        }
+    }
 
     #[test]
     fn restores_only_tokens_issued_for_the_compiled_client_id() {

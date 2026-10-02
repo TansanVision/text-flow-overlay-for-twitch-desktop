@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-finish-channel-point-effect"
+description = "Enables the finish_channel_point_effect command without any pre-configured scope."
+commands.allow = ["finish_channel_point_effect"]
+
+[[permission]]
+identifier = "deny-finish-channel-point-effect"
+description = "Denies the finish_channel_point_effect command without any pre-configured scope."
+commands.deny = ["finish_channel_point_effect"]

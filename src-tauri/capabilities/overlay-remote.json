@@ -17,6 +17,8 @@
     "allow-notify-manual-raid-clips-completed",
     "allow-notify-raid-phase",
     "allow-set-raid-clip-playback",
+    "allow-claim-channel-point-effect",
+    "allow-finish-channel-point-effect",
     "allow-send-twitch-shoutout"
   ]
 }

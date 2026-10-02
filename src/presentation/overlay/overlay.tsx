@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   type CommentFont,
@@ -11,16 +11,30 @@ import {
 } from '../comment-font';
 import type { Language } from '../i18n';
 import { BuiltInEffect } from './built-in-effect';
+import { ChannelPointVisual } from './channel-point-visual';
+import {
+  type ChatModeration,
+  ChatModerationHistory,
+  type ChatSource,
+  isRemovedBy,
+  type ModeratedContent,
+} from './chat-moderation';
 import {
   type CommentSize,
   type EffectCommand,
   isCustomStampHelpCommand,
   parseCommands,
 } from './comment-command';
-import { shouldFilterComment, splitByBreaklineCommand, tokenizeKeywords } from './comment-pipeline';
+import {
+  removeSpacesBetweenStamps,
+  shouldFilterComment,
+  splitByBreaklineCommand,
+  tokenizeKeywords,
+} from './comment-pipeline';
 import { CustomCommandHelp, type HelpStamp } from './custom-command-help';
 import { FallingStamps } from './falling-stamps';
 import { type Raid, RaidIntro } from './raid-intro';
+import { type PointsDecoration, useChannelPointEffects } from './use-channel-point-effects';
 import './style.css';
 
 type ChatFragment =
@@ -39,7 +53,8 @@ type CustomStamp = { commandName: string; dataUri: string; effectType: string };
 type ExternalEmote = { name: string; url: string; provider: string };
 type ExternalEmoteResult = { emotes: ExternalEmote[] };
 
-type ChatMessage = {
+type ChatMessage = ModeratedContent & {
+  pointsDecoration?: PointsDecoration;
   id: string;
   lines: ChatLine[];
   lane: number;
@@ -48,15 +63,15 @@ type ChatMessage = {
   alignment: string;
 };
 type ChatLine = { key: string; fragments: RenderFragment[] };
-type IncomingChatMessage = {
+type IncomingChatMessage = ModeratedContent & {
   id: string;
   fragments: ChatFragment[];
   authorName?: string;
   interactionType?: string;
 };
-type ActiveEffect = { id: string; type: EffectCommand };
-type ActiveFallingStamp = { id: string; dataUri: string };
-type HelpRequest = { id: string; stamps: HelpStamp[] };
+type ActiveEffect = ModeratedContent & { id: string; type: EffectCommand };
+type ActiveFallingStamp = ModeratedContent & { id: string; dataUri: string };
+type HelpRequest = ModeratedContent & { id: string; stamps: HelpStamp[] };
 
 type OverlaySettings = {
   language: Language;
@@ -153,7 +168,7 @@ function expandCustomStamps(
       );
     }
   }
-  return { fragments: expanded, fallingStamps };
+  return { fragments: removeSpacesBetweenStamps(expanded), fallingStamps };
 }
 
 function splitChatFragmentsIntoLines(fragments: ChatFragment[]): ChatFragment[][] {
@@ -192,10 +207,13 @@ export function Overlay(): React.JSX.Element {
   const [effects, setEffects] = useState<ActiveEffect[]>([]);
   const [fallingStamps, setFallingStamps] = useState<ActiveFallingStamp[]>([]);
   const [raids, setRaids] = useState<Raid[]>([]);
+  const points = useChannelPointEffects(raids.length > 0);
+  const decoratePoints = points.decorate;
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
+  const moderation = useRef(new ChatModerationHistory());
 
   const queueCustomStampHelp = useCallback(
-    (id: string) => {
+    (id: string, source?: ChatSource) => {
       const stamps = [...customStamps.values()].map(({ commandName, dataUri }) => ({
         commandName,
         dataUri,
@@ -212,7 +230,7 @@ export function Overlay(): React.JSX.Element {
       setHelpRequests((current) =>
         current.some((request) => request.id === id)
           ? current
-          : [...current, { id, stamps: items }],
+          : [...current, { id, stamps: items, source }],
       );
     },
     [customStamps, customStampsLoadError, t],
@@ -242,10 +260,23 @@ export function Overlay(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const unlisten = listen<ChatModeration>('twitch-chat-moderation', ({ payload }) => {
+      moderation.current.record(payload);
+      const keep = (item: ModeratedContent) => !isRemovedBy(item.source, payload);
+      setMessages((current) => current.filter(keep));
+      setEffects((current) => current.filter(keep));
+      setFallingStamps((current) => current.filter(keep));
+      setHelpRequests((current) => current.filter(keep));
+    });
+    return () => void unlisten.then((dispose) => dispose());
+  }, []);
+
+  useEffect(() => {
     const unlisten = listen<IncomingChatMessage>('twitch-chat-message', ({ payload }) => {
+      if (moderation.current.removes(payload.source)) return;
       const fullText = payload.fragments.map((fragment) => fragment.text).join('');
       if (isCustomStampHelpCommand(fullText)) {
-        queueCustomStampHelp(payload.id);
+        queueCustomStampHelp(payload.id, payload.source);
         return;
       }
       if (shouldFilterComment(fullText)) return;
@@ -253,7 +284,10 @@ export function Overlay(): React.JSX.Element {
       const size = commands.size ?? settings.defaultSize;
       const effect = commands.effect;
       if (effect && settings.enabledEffects.includes(effect)) {
-        setEffects((current) => [...current, { id: `${payload.id}-${effect}`, type: effect }]);
+        setEffects((current) => [
+          ...current,
+          { id: `${payload.id}-${effect}`, type: effect, source: payload.source },
+        ]);
       }
       const sourceLines = splitChatFragmentsIntoLines(
         trimFragments(payload.fragments, commands.removeLength),
@@ -261,7 +295,9 @@ export function Overlay(): React.JSX.Element {
       const expandedLines = sourceLines.map((line) =>
         expandCustomStamps(line, customStamps, externalEmotes),
       );
-      const newFallingStamps = expandedLines.flatMap((line) => line.fallingStamps);
+      const newFallingStamps = expandedLines.flatMap((line) =>
+        line.fallingStamps.map((stamp) => ({ ...stamp, source: payload.source })),
+      );
       if (newFallingStamps.length > 0) {
         setFallingStamps((current) => [...current, ...newFallingStamps]);
       }
@@ -271,10 +307,12 @@ export function Overlay(): React.JSX.Element {
       }));
       if (lines.every((line) => line.fragments.every((fragment) => fragment.text.trim() === '')))
         return;
+      const pointsDecoration = decoratePoints(payload.source);
       setMessages((current) => [
         ...current,
         {
           ...payload,
+          pointsDecoration,
           lines,
           size,
           color: commands.color,
@@ -287,6 +325,7 @@ export function Overlay(): React.JSX.Element {
       void unlisten.then((dispose) => dispose());
     };
   }, [
+    decoratePoints,
     settings.defaultSize,
     settings.enabledEffects,
     customStamps,
@@ -361,6 +400,12 @@ export function Overlay(): React.JSX.Element {
 
   return (
     <main className="overlay" aria-label="Text Flow Overlay for Twitch">
+      <ChannelPointVisual
+        key={points.view?.job.id}
+        view={points.view}
+        paused={points.paused}
+        stamps={[...customStamps.values()]}
+      />
       {raids[0] && (
         <RaidIntro
           key={`${raids[0].presentation ?? 'raid'}-${raids[0].id}`}
@@ -426,7 +471,9 @@ export function Overlay(): React.JSX.Element {
           }}
           onAnimationEnd={() => removeMessage(message.id)}
         >
-          <span className="chat-lines">
+          <span
+            className={`chat-lines${!points.paused && points.view?.phase === 'active' && message.pointsDecoration?.jobId === points.view.job.id ? ` points-${message.pointsDecoration.type}` : ''}`}
+          >
             {message.lines.map((line) => (
               <span className="chat-line" key={line.key}>
                 {line.fragments.map((fragment) =>

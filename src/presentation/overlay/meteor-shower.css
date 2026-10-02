@@ -1,0 +1,84 @@
+.points-meteor-shower {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.points-meteor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: points-meteor-flight var(--meteor-duration) linear var(--meteor-delay) both;
+}
+
+.points-meteor-trail {
+  position: absolute;
+  left: 0;
+  top: calc(var(--meteor-size) * -0.12);
+  width: var(--meteor-length);
+  height: calc(var(--meteor-size) * 0.24);
+  border-radius: 50%;
+  background: linear-gradient(to right, #fff, currentColor 12%, transparent);
+  box-shadow: 0 0 0.65vmin color-mix(in srgb, currentColor 25%, transparent);
+  transform: rotate(var(--meteor-angle));
+  transform-origin: left center;
+}
+
+.points-meteor-head {
+  position: absolute;
+  width: var(--meteor-size);
+  height: var(--meteor-size);
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 0.5vmin currentColor);
+}
+
+.points-meteor-head::after {
+  content: "";
+  position: absolute;
+  inset: 36%;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0.8vmin currentColor;
+}
+
+.points-meteor-head svg,
+.points-meteor-twinkle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.points-meteor-twinkle {
+  position: absolute;
+  width: 0.8vmin;
+  height: 0.8vmin;
+  color: #d3eaff;
+  animation: points-meteor-twinkle 1.8s ease-in-out var(--twinkle-delay) both;
+}
+
+@keyframes points-meteor-flight {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  12%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--meteor-x), var(--meteor-y));
+  }
+}
+
+@keyframes points-meteor-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  40% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}

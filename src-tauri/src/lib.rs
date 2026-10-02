@@ -13,6 +13,10 @@ mod raid_clip_playback;
 mod twitch_auth;
 mod twitch_chat;
 mod twitch_config;
+mod twitch_connection;
+mod twitch_eventsub;
+mod twitch_moderation;
+mod twitch_points;
 
 struct OverlayWindowPositionState {
     previous_position: Mutex<Option<PhysicalPosition<i32>>>,
@@ -72,6 +76,13 @@ pub fn run() {
             data_directory.join("auth").join("twitch-token.json"),
         ))
         .manage(settings)
+        .manage(twitch_connection::ConnectionState::default())
+        .manage(
+            twitch_points::PointsState::load(
+                data_directory.join("config").join("channel-points.json"),
+            )
+            .expect("failed to load channel points state"),
+        )
         .manage(custom_stamps)
         .manage(custom_fonts)
         .manage(raid_clip_playback::RaidClipPlaybackState::default())
@@ -86,6 +97,13 @@ pub fn run() {
             twitch_auth::poll_twitch_device_authorization,
             twitch_auth::restore_twitch_authorization,
             twitch_auth::logout_twitch,
+            twitch_auth::reconnect_twitch,
+            twitch_connection::get_twitch_connection,
+            twitch_points::get_channel_points,
+            twitch_points::save_channel_point_reward,
+            twitch_points::preview_channel_point_effect,
+            twitch_points::claim_channel_point_effect,
+            twitch_points::finish_channel_point_effect,
             twitch_auth::send_twitch_shoutout,
             twitch_auth::start_twitch_commercial,
             raid_clip_playback::get_raid_clip_playback,
@@ -154,6 +172,7 @@ pub fn run() {
             .skip_taskbar(true)
             .build()?;
             overlay.set_ignore_cursor_events(true)?;
+            twitch_points::start_worker(app.handle().clone());
 
             Ok(())
         })

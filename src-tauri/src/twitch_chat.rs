@@ -1,15 +1,19 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use futures_util::StreamExt;
 use rand::{seq::SliceRandom, Rng};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio_tungstenite::connect_async;
+use tokio::{
+    sync::{mpsc, Notify},
+    task::JoinSet,
+};
 
 use crate::twitch_config::TWITCH_CLIENT_ID;
+use crate::twitch_connection::{ConnectionPhase, ConnectionState};
+use crate::twitch_eventsub::{self, ConnectionError, SessionStatus};
+use crate::twitch_moderation::{self, ChatSource};
 
-const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 const CLIP_CANDIDATE_LIMIT: &str = "100";
 const RAID_CLIP_LIMIT: usize = 5;
@@ -21,6 +25,8 @@ struct ChatMessage {
     fragments: Vec<ChatFragment>,
     author_name: Option<String>,
     interaction_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<ChatSource>,
 }
 
 #[derive(Clone, Serialize)]
@@ -68,130 +74,265 @@ pub fn spawn(
     access_token: String,
     broadcaster_user_id: String,
     chatting_user_id: String,
+    refresh_requested: Arc<Notify>,
 ) -> tauri::async_runtime::JoinHandle<()> {
+    let generation = app.state::<ConnectionState>().begin(&app);
+    let points_enabled = app
+        .state::<crate::twitch_auth::TwitchAuthState>()
+        .has_points_scope();
     tauri::async_runtime::spawn(async move {
-        loop {
-            if let Err(error) =
-                connect_and_receive(&app, &access_token, &broadcaster_user_id, &chatting_user_id)
-                    .await
-            {
-                log::warn!("Twitch chat connection ended: {error}");
+        // Raid metadata lookups must never block keepalive, pongs, or normal chat.
+        let (raid_sender, mut raid_receiver) = mpsc::channel::<Value>(64);
+        let mut workers = JoinSet::new();
+        let raid_app = app.clone();
+        let raid_token = access_token.clone();
+        workers.spawn(async move {
+            while let Some(message) = raid_receiver.recv().await {
+                if let Err(error) = emit_raid(&raid_app, &raid_token, &message, generation).await {
+                    log::warn!("Raid notification could not be displayed: {error}");
+                }
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+        let mut attempt = 0;
+        loop {
+            let state = app.state::<ConnectionState>();
+            if !state.is_current(generation) {
+                return;
+            }
+            if attempt > 0 {
+                state.update(
+                    &app,
+                    generation,
+                    ConnectionPhase::Reconnecting,
+                    None,
+                    Vec::new(),
+                );
+            }
+            let mut connected_since = None;
+            let result = twitch_eventsub::run_session(
+                twitch_eventsub::ENDPOINT,
+                |session_id| {
+                    subscribe_all(
+                        &access_token,
+                        &broadcaster_user_id,
+                        &chatting_user_id,
+                        session_id,
+                        points_enabled,
+                    )
+                },
+                |message| {
+                    if state.accept(generation, &message) {
+                        dispatch_notification(&app, &message, &broadcaster_user_id, &raid_sender);
+                    }
+                    Ok(())
+                },
+                |status| match status {
+                    SessionStatus::Connected(unavailable) => {
+                        connected_since.get_or_insert(tokio::time::Instant::now());
+                        state.update(
+                            &app,
+                            generation,
+                            ConnectionPhase::Connected,
+                            None,
+                            unavailable,
+                        );
+                    }
+                    SessionStatus::Reconnecting => state.update(
+                        &app,
+                        generation,
+                        ConnectionPhase::Reconnecting,
+                        None,
+                        Vec::new(),
+                    ),
+                },
+            )
+            .await;
+            let error = result
+                .err()
+                .unwrap_or_else(|| ConnectionError::Retry("EventSub session ended".into()));
+            if connected_since.is_some_and(|since| since.elapsed() >= Duration::from_secs(60)) {
+                attempt = 0;
+            }
+            let mut refreshing = false;
+            match error {
+                ConnectionError::ReauthorizationRequired => {
+                    state.update(
+                        &app,
+                        generation,
+                        ConnectionPhase::ReauthorizationRequired,
+                        None,
+                        Vec::new(),
+                    );
+                    return;
+                }
+                ConnectionError::Unavailable => {
+                    state.update(
+                        &app,
+                        generation,
+                        ConnectionPhase::Unavailable,
+                        None,
+                        Vec::new(),
+                    );
+                    return;
+                }
+                ConnectionError::Unauthorized => {
+                    if !crate::twitch_auth::can_refresh_token(&app) {
+                        state.update(
+                            &app,
+                            generation,
+                            ConnectionPhase::ReauthorizationRequired,
+                            None,
+                            Vec::new(),
+                        );
+                        return;
+                    }
+                    refresh_requested.notify_one();
+                    refreshing = true;
+                }
+                ConnectionError::Retry(reason) => {
+                    log::warn!("Twitch connection interrupted: {reason}")
+                }
+            }
+            let delay = if refreshing {
+                Duration::from_secs(30)
+            } else {
+                twitch_eventsub::retry_delay(attempt)
+            };
+            attempt = attempt.saturating_add(1);
+            state.update(
+                &app,
+                generation,
+                ConnectionPhase::Reconnecting,
+                Some(delay.as_secs().max(1)),
+                Vec::new(),
+            );
+            tokio::time::sleep(delay).await;
         }
     })
 }
 
-async fn connect_and_receive(
+fn dispatch_notification(
     app: &AppHandle,
+    message: &Value,
+    broadcaster_user_id: &str,
+    raid_sender: &mpsc::Sender<Value>,
+) {
+    let result = match message["metadata"]["subscription_type"].as_str() {
+        Some(crate::twitch_points::ADD_EVENT | crate::twitch_points::UPDATE_EVENT) => app
+            .state::<crate::twitch_points::PointsState>()
+            .receive(message, broadcaster_user_id),
+        Some("channel.chat.message") => emit_chat_message(app, message, broadcaster_user_id),
+        Some(kind) if twitch_moderation::SUBSCRIPTIONS.contains(&kind) => {
+            match twitch_moderation::parse(message, broadcaster_user_id) {
+                Some(event) => app
+                    .emit_to("overlay", "twitch-chat-moderation", event)
+                    .map_err(|error| error.to_string()),
+                None => Err("Invalid chat moderation event".to_owned()),
+            }
+        }
+        Some("channel.raid") => {
+            if message["payload"]["event"]["from_broadcaster_user_id"].as_str()
+                == Some(broadcaster_user_id)
+            {
+                save_audience_on_outgoing_raid(app)
+            } else {
+                raid_sender
+                    .try_send(message.clone())
+                    .map_err(|_| "Raid notification queue is full or closed".to_owned())
+            }
+        }
+        Some("channel.cheer") => emit_support_message(app, message, "cheer", broadcaster_user_id),
+        Some("channel.subscribe" | "channel.subscription.message") => {
+            emit_support_message(app, message, "subscribe", broadcaster_user_id)
+        }
+        Some("channel.subscription.gift") => {
+            emit_support_message(app, message, "gift", broadcaster_user_id)
+        }
+        _ => Ok(()),
+    };
+    if let Err(error) = result {
+        log::warn!("Twitch notification could not be displayed: {error}");
+    }
+}
+
+async fn subscribe_all(
     access_token: &str,
     broadcaster_user_id: &str,
     chatting_user_id: &str,
-) -> Result<(), String> {
-    let (socket, _) = connect_async(EVENTSUB_URL)
-        .await
-        .map_err(|error| error.to_string())?;
-    let (_, mut incoming) = socket.split();
-
-    while let Some(frame) = incoming.next().await {
-        let frame = frame.map_err(|error| error.to_string())?;
-        if !frame.is_text() {
-            continue;
-        }
-        let message: Value =
-            serde_json::from_str(frame.to_text().map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())?;
-        match message["metadata"]["message_type"].as_str() {
-            Some("session_welcome") => {
-                let session_id = message["payload"]["session"]["id"]
-                    .as_str()
-                    .ok_or_else(|| "EventSub session ID was missing".to_owned())?;
-                subscribe_chat(
-                    access_token,
-                    broadcaster_user_id,
-                    chatting_user_id,
-                    session_id,
-                )
-                .await?;
-                subscribe_raid(access_token, broadcaster_user_id, session_id).await?;
-                subscribe_support_events(access_token, broadcaster_user_id, session_id).await?;
-            }
-            Some("notification") => match message["metadata"]["subscription_type"].as_str() {
-                Some("channel.chat.message") => {
-                    emit_chat_message(app, &message, broadcaster_user_id)?
-                }
-                Some("channel.raid") => {
-                    let event = &message["payload"]["event"];
-                    if event["from_broadcaster_user_id"].as_str() == Some(broadcaster_user_id) {
-                        save_audience_on_outgoing_raid(app)?;
-                    } else {
-                        emit_raid(app, access_token, &message).await?;
-                    }
-                }
-                Some("channel.cheer") => {
-                    emit_support_message(app, &message, "cheer", broadcaster_user_id)?
-                }
-                Some("channel.subscribe" | "channel.subscription.message") => {
-                    emit_support_message(app, &message, "subscribe", broadcaster_user_id)?
-                }
-                Some("channel.subscription.gift") => {
-                    emit_support_message(app, &message, "gift", broadcaster_user_id)?
-                }
-                _ => {}
-            },
-            Some("session_reconnect") => return Ok(()),
-            Some("revocation") => return Err("Twitch chat subscription was revoked".into()),
-            _ => {}
+    session_id: String,
+    points_enabled: bool,
+) -> Result<Vec<String>, ConnectionError> {
+    let client = reqwest::Client::new();
+    create_subscription(&client, access_token, &serde_json::json!({
+        "type": "channel.chat.message", "version": "1",
+        "condition": { "broadcaster_user_id": broadcaster_user_id, "user_id": chatting_user_id },
+        "transport": { "method": "websocket", "session_id": session_id }
+    })).await?;
+    let mut requests = Vec::new();
+    if points_enabled {
+        for kind in [
+            crate::twitch_points::ADD_EVENT,
+            crate::twitch_points::UPDATE_EVENT,
+        ] {
+            requests.push((
+                kind,
+                serde_json::json!({ "broadcaster_user_id": broadcaster_user_id }),
+            ));
         }
     }
-    Ok(())
-}
-
-async fn subscribe_support_events(
-    access_token: &str,
-    broadcaster_user_id: &str,
-    session_id: &str,
-) -> Result<(), String> {
+    for kind in twitch_moderation::SUBSCRIPTIONS {
+        requests.push((kind, serde_json::json!({ "broadcaster_user_id": broadcaster_user_id, "user_id": chatting_user_id })));
+    }
+    for direction in ["from_broadcaster_user_id", "to_broadcaster_user_id"] {
+        requests.push((
+            "channel.raid",
+            serde_json::json!({ (direction): broadcaster_user_id }),
+        ));
+    }
     for event_type in [
         "channel.cheer",
         "channel.subscribe",
         "channel.subscription.message",
         "channel.subscription.gift",
     ] {
-        let body = serde_json::json!({
-            "type": event_type,
-            "version": "1",
-            "condition": { "broadcaster_user_id": broadcaster_user_id },
-            "transport": { "method": "websocket", "session_id": session_id }
-        });
-        create_subscription(access_token, &body).await?;
+        requests.push((
+            event_type,
+            serde_json::json!({ "broadcaster_user_id": broadcaster_user_id }),
+        ));
     }
-    Ok(())
-}
-
-async fn subscribe_chat(
-    access_token: &str,
-    broadcaster_user_id: &str,
-    chatting_user_id: &str,
-    session_id: &str,
-) -> Result<(), String> {
-    let body = serde_json::json!({
-        "type": "channel.chat.message",
-        "version": "1",
-        "condition": {
-            "broadcaster_user_id": broadcaster_user_id,
-            "user_id": chatting_user_id
-        },
-        "transport": { "method": "websocket", "session_id": session_id }
-    });
-    create_subscription(access_token, &body).await?;
-    let outgoing_body = serde_json::json!({
-        "type": "channel.raid",
-        "version": "1",
-        "condition": { "from_broadcaster_user_id": broadcaster_user_id },
-        "transport": { "method": "websocket", "session_id": session_id }
-    });
-    create_subscription(access_token, &outgoing_body).await
+    let results = futures_util::future::join_all(requests.into_iter().map(|(kind, condition)| {
+        let client = &client;
+        let session_id = &session_id;
+        async move {
+            (
+                kind,
+                create_subscription(
+                    client,
+                    access_token,
+                    &serde_json::json!({
+                        "type": kind,
+                        "version": "1",
+                        "condition": condition,
+                        "transport": { "method": "websocket", "session_id": session_id }
+                    }),
+                )
+                .await,
+            )
+        }
+    }))
+    .await;
+    let mut unavailable = Vec::new();
+    for (kind, result) in results {
+        match result {
+            Err(ConnectionError::Unauthorized) => return Err(ConnectionError::Unauthorized),
+            Err(_) => {
+                unavailable.push(kind.to_owned());
+                log::warn!("EventSub subscription unavailable: {kind}");
+            }
+            Ok(()) => {}
+        }
+    }
+    Ok(unavailable)
 }
 
 fn save_audience_on_outgoing_raid(app: &AppHandle) -> Result<(), String> {
@@ -200,39 +341,33 @@ fn save_audience_on_outgoing_raid(app: &AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-async fn subscribe_raid(
+async fn create_subscription(
+    client: &reqwest::Client,
     access_token: &str,
-    broadcaster_user_id: &str,
-    session_id: &str,
-) -> Result<(), String> {
-    let body = serde_json::json!({
-        "type": "channel.raid",
-        "version": "1",
-        "condition": { "to_broadcaster_user_id": broadcaster_user_id },
-        "transport": { "method": "websocket", "session_id": session_id }
-    });
-    create_subscription(access_token, &body).await
-}
-
-async fn create_subscription(access_token: &str, body: &Value) -> Result<(), String> {
-    let response = reqwest::Client::new()
+    body: &Value,
+) -> Result<(), ConnectionError> {
+    let response = client
         .post(SUBSCRIPTIONS_URL)
+        .timeout(Duration::from_secs(8))
         .bearer_auth(access_token)
         .header("Client-Id", TWITCH_CLIENT_ID)
         .json(&body)
         .send()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|_| ConnectionError::Retry("EventSub subscription request failed".into()))?;
     if response.status().is_success() {
         Ok(())
     } else {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        Err(format!("EventSub subscription failed ({status}): {body}"))
+        Err(twitch_eventsub::subscription_error(response.status()))
     }
 }
 
-async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Result<(), String> {
+async fn emit_raid(
+    app: &AppHandle,
+    access_token: &str,
+    message: &Value,
+    generation: u64,
+) -> Result<(), String> {
     let event = &message["payload"]["event"];
     let user_id = event["from_broadcaster_user_id"]
         .as_str()
@@ -247,6 +382,9 @@ async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Resu
     )?;
     let profile_image_url = get_profile_image(access_token, user_id).await;
     let clips = get_clips(access_token, user_id).await;
+    if !app.state::<ConnectionState>().is_current(generation) {
+        return Ok(());
+    }
     let raid = RaidMessage {
         id: message["metadata"]["message_id"]
             .as_str()
@@ -269,6 +407,7 @@ async fn emit_raid(app: &AppHandle, access_token: &str, message: &Value) -> Resu
 async fn get_clips(access_token: &str, user_id: &str) -> Vec<RaidClip> {
     let response = match reqwest::Client::new()
         .get("https://api.twitch.tv/helix/clips")
+        .timeout(Duration::from_secs(8))
         .query(&[("broadcaster_id", user_id), ("first", CLIP_CANDIDATE_LIMIT)])
         .bearer_auth(access_token)
         .header("Client-Id", TWITCH_CLIENT_ID)
@@ -322,6 +461,7 @@ fn select_random_clips<R: Rng + ?Sized>(
 async fn get_profile_image(access_token: &str, user_id: &str) -> Option<String> {
     let response = reqwest::Client::new()
         .get("https://api.twitch.tv/helix/users")
+        .timeout(Duration::from_secs(8))
         .query(&[("id", user_id)])
         .bearer_auth(access_token)
         .header("Client-Id", TWITCH_CLIENT_ID)
@@ -339,6 +479,8 @@ fn emit_chat_message(
     message: &Value,
     broadcaster_user_id: &str,
 ) -> Result<(), String> {
+    let source = twitch_moderation::chat_source(message, broadcaster_user_id)
+        .ok_or_else(|| "Invalid chat message source".to_owned())?;
     let event = &message["payload"]["event"];
     let fragments = event["message"]["fragments"]
         .as_array()
@@ -374,6 +516,7 @@ fn emit_chat_message(
         fragments,
         author_name: author_name.map(str::to_owned),
         interaction_type: "comment".to_owned(),
+        source: Some(source),
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
         .map_err(|error| error.to_string())
@@ -420,6 +563,7 @@ fn emit_support_message(
         }],
         author_name: Some(name.to_owned()),
         interaction_type: kind.to_owned(),
+        source: None,
     };
     app.emit_to("overlay", "twitch-chat-message", chat)
         .map_err(|error| error.to_string())

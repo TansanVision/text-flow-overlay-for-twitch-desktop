@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-twitch-connection"
+description = "Enables the get_twitch_connection command without any pre-configured scope."
+commands.allow = ["get_twitch_connection"]
+
+[[permission]]
+identifier = "deny-get-twitch-connection"
+description = "Denies the get_twitch_connection command without any pre-configured scope."
+commands.deny = ["get_twitch_connection"]

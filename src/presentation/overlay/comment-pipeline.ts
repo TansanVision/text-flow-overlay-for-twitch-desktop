@@ -13,6 +13,34 @@ export function shouldFilterComment(text: string): boolean {
 
 export type TextToken = { text: string; keyword?: string };
 
+type InlineFragment = {
+  type: 'text' | 'emote' | 'customStamp' | 'externalEmote';
+  text: string;
+};
+
+export function removeSpacesBetweenStamps<T extends InlineFragment>(fragments: T[]): T[] {
+  const result: T[] = [];
+  for (let index = 0; index < fragments.length; index += 1) {
+    const start = index;
+    while (
+      index < fragments.length &&
+      fragments[index].type === 'text' &&
+      /^[^\S\r\n]*$/.test(fragments[index].text)
+    ) {
+      index += 1;
+    }
+    if (index > start) {
+      const previous = fragments[start - 1];
+      const next = fragments[index];
+      if (!previous || previous.type === 'text' || !next || next.type === 'text') {
+        result.push(...fragments.slice(start, index));
+      }
+    }
+    if (index < fragments.length) result.push(fragments[index]);
+  }
+  return result;
+}
+
 export function splitByBreaklineCommand(text: string): string[] {
   return text.split(/[ \t]*U\+2003[ \t]*/);
 }

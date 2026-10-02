@@ -364,3 +364,18 @@ body.control-panel-page #root {
 .control-panel dd {
   margin: 0;
 }
+.points-reward {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #454055;
+  border-radius: 8px;
+}
+.points-history {
+  padding-left: 1.2rem;
+}
+.points-history li {
+  margin: 0.5rem 0;
+}
+.points-history small {
+  display: block;
+}

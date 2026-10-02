@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-channel-points"
+description = "Enables the get_channel_points command without any pre-configured scope."
+commands.allow = ["get_channel_points"]
+
+[[permission]]
+identifier = "deny-get-channel-points"
+description = "Denies the get_channel_points command without any pre-configured scope."
+commands.deny = ["get_channel_points"]

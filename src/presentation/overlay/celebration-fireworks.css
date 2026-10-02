@@ -1,0 +1,131 @@
+.points-fireworks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.points-firework,
+.points-firework-fall {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.points-firework-rocket {
+  position: absolute;
+  width: 0.45vmin;
+  height: 6vmin;
+  border-radius: 50%;
+  background: linear-gradient(to bottom, #fffbe7, currentColor 25%, transparent);
+  filter: drop-shadow(0 0 0.4vmin currentColor);
+  animation: points-firework-launch 0.85s cubic-bezier(0.12, 0.55, 0.35, 1)
+    var(--firework-launch-delay) both;
+}
+
+.points-firework-ring {
+  position: absolute;
+  width: var(--firework-ring-size);
+  height: var(--firework-ring-size);
+  border: 0.2vmin solid currentColor;
+  border-radius: 50%;
+  box-shadow:
+    0 0 1vmin currentColor,
+    inset 0 0 1vmin currentColor;
+  animation: points-firework-ring 0.6s ease-out var(--firework-delay) both;
+}
+
+.points-firework-fall {
+  animation: points-firework-fall var(--firework-duration) ease-in var(--firework-delay) both;
+}
+
+.points-firework-spark {
+  position: absolute;
+  width: var(--spark-size);
+  height: var(--spark-size);
+  animation: points-firework-burst var(--firework-duration) linear var(--firework-delay) both;
+}
+
+.points-firework-spark i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #fffbe9;
+  box-shadow:
+    0 0 0.4vmin currentColor,
+    0 0 1vmin currentColor;
+}
+
+.points-firework-spark i::before {
+  content: "";
+  position: absolute;
+  right: 50%;
+  top: 25%;
+  width: 2.3vmin;
+  height: 50%;
+  border-radius: 50%;
+  background: linear-gradient(to right, transparent, currentColor);
+  transform: rotate(var(--spark-angle));
+  transform-origin: right center;
+}
+
+@keyframes points-firework-launch {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--firework-launch-distance)) scaleY(1.5);
+  }
+  12% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0) scaleY(0.3);
+  }
+}
+
+@keyframes points-firework-ring {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.05);
+  }
+  15% {
+    opacity: 0.65;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes points-firework-fall {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(9vh);
+  }
+}
+
+@keyframes points-firework-burst {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  3% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 1;
+    transform: translate(calc(var(--spark-x) * 0.82), calc(var(--spark-y) * 0.82)) scale(1);
+  }
+  68% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--spark-x), var(--spark-y)) scale(0.25);
+  }
+}
